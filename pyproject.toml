@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sem_proj"
+version = "0.1.0"
+description = "Sleep staging project"
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+where = ["src"]
