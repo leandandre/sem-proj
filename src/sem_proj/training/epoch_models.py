@@ -329,9 +329,9 @@ if __name__ == "__main__":
     }
     # Option 1: Train WITH preprocessing
     preproc_cfg = PreprocessingConfig(
-        notch_freqs=[50.0, 100.0],  # Remove power line noise
-        bandpass_l_freq=0.5,
-        bandpass_h_freq=40.0,
+        notch_freqs=[50.0, 100.0],  # Remove power line noise (Europe)
+        bandpass_l_freq=0.3,    # try out 0.5 Hz as well!
+        bandpass_h_freq=40.0,   # try out 30 Hz as well!
         resample_freq=128.0,  # Downsample from 256 Hz to 128 Hz
         apply_preprocessing=True,
     )
@@ -342,7 +342,7 @@ if __name__ == "__main__":
         num_epochs=10,
         batch_size=4,
         lr=1e-3,
-        experiment_name="epoch_transformer_v1",
+        experiment_name="epoch_transformer_notch_bandpass_resample_v1",
         model_kwargs=model_cfg,
         preprocess_config=preproc_cfg
     )
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     #     num_epochs=20,
     #     batch_size=4,
     #     lr=1e-3,
-    #     experiment_name="transformer_raw_v1",
+    #     experiment_name="epoch_transformer_raw_v1",
     #     model_kwargs=model_cfg_raw,
     #     preprocess_config=no_preproc_cfg,
     # )
