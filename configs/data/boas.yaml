@@ -1,0 +1,12 @@
+# root: "data/raw/boas"
+# modality: "HB"            # "HB" (headband) or "PSG"
+# channels: ["HB_1", "HB_2"]  # fallback if autodetect fails
+# label_col: "stage_hum"    # use human consensus
+# epoch_len_s: 30
+# target_sfreq: 128         # resample for uniform T
+# drop_labels: [8, -2]      # dataset-specific non-sleep / artifact codes
+# cache_dir: "data/processed/boas_cache"  # optional npy cache
+
+# raw_dir: data/raw/boas
+# interim_dir: data/interim/boas
+# processed_dir: data/processed/boas

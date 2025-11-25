@@ -1,0 +1,10 @@
+# Only z-normalization
+apply_notch: false
+notch_freqs: null
+apply_bandpass: false
+bandpass_l_freq: null
+bandpass_h_freq: null
+apply_resample: false
+resample_freq: null
+apply_znorm: true
+znorm_per_channel: true

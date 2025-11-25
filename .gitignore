@@ -207,7 +207,25 @@ marimo/_lsp/
 __marimo__/
 
 ### added by me ###
-data/
-models/
-reports/figures/
-reports/metrics/
+# Raw data (too large for git)
+data/raw/
+
+# Preprocessed cache (regenerated from raw data)
+data/processed/cache/
+
+# Model checkpoints (too large, only keep best models)
+checkpoints/
+
+# TensorBoard logs (regenerated during training)
+logs/
+
+# Temporary outputs
+data/interim/
+models/export/
+models/runs/
+
+# Keep data splits (important for reproducibility!)
+!data/processed/data_splits.json
+
+# Keep config files
+!configs/

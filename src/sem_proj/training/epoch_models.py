@@ -9,31 +9,33 @@ from sklearn.metrics import f1_score
 import numpy as np
 
 from sem_proj.data.datasets import BoasDataset
-from sem_proj.data.preprocessing import PreprocessingConfig
+from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.models.model_factory import EpochTransformer
-from sem_proj.data.preprocessing import PreprocessingConfig
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
 
 # Project root = .../sem-proj
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 LOG_DIR = PROJECT_ROOT / "logs"
+CONFIG_DIR = PROJECT_ROOT / "configs" / "preprocess"
 
 
-def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[PreprocessingConfig] = None):
-    # Load fixed splits, call by seperate functions for clarity
+def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[PreprocessingConfig] = None, use_cache: bool = True):
+    # Load fixed splits
     tr_subs = get_train_subjects()
     val_subs = get_val_subjects()
 
     train_ds = BoasDataset(
         subjects=tr_subs, 
         mode="headband",
-        preprocess_config=preprocess_config 
+        preprocess_config=preprocess_config,
+        use_cache=use_cache
     )
     val_ds = BoasDataset(
         subjects=val_subs, 
         mode="headband",
-        preprocess_config=preprocess_config 
+        preprocess_config=preprocess_config,
+        use_cache=use_cache
     )
 
     train_loader = DataLoader(
@@ -123,7 +125,8 @@ def train_epochtransformer(
     lr: float = 1e-3,
     experiment_name: str = "epoch_transformer_v1",
     model_kwargs: dict | None = None,
-    preprocess_config: Optional[PreprocessingConfig] = None  
+    preprocess_config: Optional[PreprocessingConfig] = None,
+    use_cache: bool = True,
 ):
     """
     Train EpochTransformer model.
@@ -134,17 +137,13 @@ def train_epochtransformer(
     batch_size : int
     lr : float
     experiment_name : str
+        Name for this experiment (used for checkpoints and logs)
     model_kwargs : dict | None
-        Overrides for model constructor, e.g. {
-            'd_model': 128,
-            'nhead': 8,
-            'num_layers': 4,
-            'dim_feedforward': 512,
-            'dropout': 0.2,
-            'input_channels': 2,
-            'seq_length': 7680,
-            'num_classes': 5
-        }.
+        Overrides for model constructor.
+    preprocess_config : PreprocessingConfig | None
+        Preprocessing configuration.
+    use_cache : bool
+        Whether to use cached preprocessed data.
     """
     checkpoint_path = CHECKPOINT_DIR / experiment_name
     log_path = LOG_DIR / experiment_name
@@ -154,10 +153,31 @@ def train_epochtransformer(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     writer = SummaryWriter(log_dir=str(log_path))
 
+    # Determine sequence length from preprocessing config
+    if preprocess_config is None:
+        preprocess_config = PreprocessingConfig.no_preprocessing()
+    
+    seq_length = get_expected_seq_length(preprocess_config)
+    
+    print(f"\n{'='*60}")
+    print(f"Training Configuration")
+    print(f"{'='*60}")
+    print(f"Experiment: {experiment_name}")
+    print(f"Device: {device}")
+    print(f"Expected sequence length: {seq_length}")
+    print(f"Batch size: {batch_size}")
+    print(f"Learning rate: {lr}")
+    print(f"Epochs: {num_epochs}")
+    print(f"Using cache: {use_cache}")
+    print(f"\nPreprocessing config:")
+    for key, value in preprocess_config.to_dict().items():
+        print(f"  {key}: {value}")
+    print(f"{'='*60}\n")
+
     # Default model config
     default_model_cfg = dict(
         input_channels=2,
-        seq_length=7680,
+        seq_length=seq_length,
         d_model=64,
         nhead=4,
         num_layers=2,
@@ -167,25 +187,27 @@ def train_epochtransformer(
     )
     if model_kwargs:
         default_model_cfg.update(model_kwargs)
+        if 'seq_length' in model_kwargs and model_kwargs['seq_length'] != seq_length:
+            print(f"WARNING: Ignoring model_kwargs['seq_length']={model_kwargs['seq_length']}. "
+                  f"Using seq_length={seq_length} from preprocessing config.")
+            default_model_cfg['seq_length'] = seq_length
 
     model = EpochTransformer(**default_model_cfg).to(device)
     
-    # Count parameters
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Model has {num_params:,} trainable parameters")
+    print(f"Model has {num_params:,} trainable parameters\n")
     
-    # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    # Log preprocessing config
-    if preprocess_config is not None:
-        print(f"Preprocessing config: {preprocess_config.to_dict()}")
     
     # Create dataloaders
-    train_loader, val_loader = make_dataloaders(batch_size=batch_size, preprocess_config=preprocess_config)
+    train_loader, val_loader = make_dataloaders(
+        batch_size=batch_size, 
+        preprocess_config=preprocess_config,
+        use_cache=use_cache
+    )
     print(f"Training samples: {len(train_loader.dataset)}")
-    print(f"Validation samples: {len(val_loader.dataset)}")
+    print(f"Validation samples: {len(val_loader.dataset)}\n")
 
     class_names = ['Wake', 'N1', 'N2', 'N3', 'REM']
     
@@ -210,16 +232,13 @@ def train_epochtransformer(
             x = x.to(device)
             y = y.to(device)
             
-            # Forward pass
             optimizer.zero_grad()
             logits = model(x)
             loss = criterion(logits, y)
             
-            # Backward pass
             loss.backward()
             optimizer.step()
             
-            # Track metrics
             batch_loss = loss.item()
             preds = logits.argmax(dim=1)
             batch_correct = (preds == y).sum().item()
@@ -229,12 +248,10 @@ def train_epochtransformer(
             train_correct += batch_correct
             train_samples += batch_size_actual
             
-            # Log batch metrics
             writer.add_scalar('Loss/train_batch', batch_loss, global_step)
             batch_acc = batch_correct / batch_size_actual
             writer.add_scalar('Accuracy/train_batch', batch_acc, global_step)
             
-            # Update progress bar
             train_pbar.set_postfix({
                 'loss': f'{batch_loss:.4f}',
                 'acc': f'{batch_acc:.3f}'
@@ -242,13 +259,11 @@ def train_epochtransformer(
             
             global_step += 1
         
-        # Compute epoch training metrics
         avg_train_loss = train_loss / train_samples
         train_accuracy = train_correct / train_samples
         
         print(f"Train Loss: {avg_train_loss:.4f} | Train Acc: {train_accuracy:.4f}")
         
-        # Log epoch training metrics
         writer.add_scalar('Loss/train_epoch', avg_train_loss, epoch)
         writer.add_scalar('Accuracy/train_epoch', train_accuracy, epoch)
         
@@ -264,16 +279,13 @@ def train_epochtransformer(
             print(f"  {cls_name}: {f1:.4f}")
             writer.add_scalar(f'F1/val_{cls_name}', f1, epoch)
         
-        # Log validation metrics
         writer.add_scalar('Loss/val_epoch', val_loss, epoch)
         writer.add_scalar('Accuracy/val_epoch', val_accuracy, epoch)
         writer.add_scalar('F1/val_macro', val_macro_f1, epoch)
         
-        # Log learning rate
         current_lr = optimizer.param_groups[0]['lr']
         writer.add_scalar('Learning_Rate', current_lr, epoch)
         
-        # Save checkpoint if best validation metric (use macro F1 as primary metric)
         if val_macro_f1 > best_macro_f1:
             best_macro_f1 = val_macro_f1
             best_val_acc = val_accuracy
@@ -286,11 +298,11 @@ def train_epochtransformer(
                 'val_loss': val_loss,
                 'val_macro_f1': val_macro_f1,
                 'val_per_class_f1': val_per_class_f1.tolist(),
-                'hyperparameters': default_model_cfg | {'lr': lr, 'batch_size': batch_size},
+                'hyperparameters': default_model_cfg,
+                'preprocessing': preprocess_config.to_dict(),
             }, checkpoint_file)
             print(f"✓ Saved best model (macro F1: {val_macro_f1:.4f})")
         
-        # Save latest checkpoint
         latest_checkpoint = checkpoint_path / "latest_model.pt"
         torch.save({
             'epoch': epoch,
@@ -302,7 +314,6 @@ def train_epochtransformer(
             'val_per_class_f1': val_per_class_f1.tolist(),
         }, latest_checkpoint)
     
-    # Training complete
     print(f"\n{'='*60}")
     print(f"Training Complete!")
     print(f"Best Validation Accuracy: {best_val_acc:.4f}")
@@ -317,46 +328,51 @@ def train_epochtransformer(
 
 
 if __name__ == "__main__":
+    # Configuration
+    CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
+    # CONFIG_NAME = "no_preprocess"                  # No preprocessing
+    # CONFIG_NAME = "notch_bandpass"                 # Just filters
+    # CONFIG_NAME = "notch_bandpass_znorm"           # Filters + znorm
+    # CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample
+    # CONFIG_NAME = "only_znorm"                     # Just normalization
+    
+    # Training hyperparameters
+    NUM_EPOCHS = 20
+    BATCH_SIZE = 8
+    LEARNING_RATE = 1e-3
+    USE_CACHE = True  # Set to False to disable caching
+    
+    
+    # Load preprocessing config
+    config_file = CONFIG_DIR / f"{CONFIG_NAME}.yaml"
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}\nAvailable configs: {list(CONFIG_DIR.glob('*.yaml'))}")
+    
+    preproc_cfg = PreprocessingConfig.from_yaml(config_file)
+    
+    # Model config (seq_length is automatically determined from preprocessing)
     model_cfg = {
         'input_channels': 2,
-        'seq_length': 7680,
         'd_model': 64,
         'nhead': 8,
         'num_layers': 4,
-        'dim_feedforward': 64*4,
+        'dim_feedforward': 256,
         'dropout': 0.2,
         'num_classes': 5,
     }
-    # Option 1: Train WITH preprocessing
-    preproc_cfg = PreprocessingConfig(
-        notch_freqs=[50.0, 100.0],  # Remove power line noise (Europe)
-        bandpass_l_freq=0.3,    # try out 0.5 Hz as well!
-        bandpass_h_freq=40.0,   # try out 30 Hz as well!
-        resample_freq=128.0,  # Downsample from 256 Hz to 128 Hz
-        apply_preprocessing=True,
-    )
-    ### important: adjust seq_length based on resample_freq
-    model_cfg['seq_length'] = int(preproc_cfg.to_dict()['resample_freq'] * 30)  # 30 seconds epochs  = 3840 samples
-    # Train the model
+    
+    # Generate experiment name based on config
+    experiment_name = f"epochtransformer_{CONFIG_NAME}_v1"
+    
+    print(f"\n Starting training with preprocessing config: {CONFIG_NAME}")
+    print(f" Config file: {config_file}")
+    
     model = train_epochtransformer(
-        num_epochs=10,
-        batch_size=4,
-        lr=1e-3,
-        experiment_name="epoch_transformer_notch_bandpass_resample_v1",
+        num_epochs=NUM_EPOCHS,
+        batch_size=BATCH_SIZE,
+        lr=LEARNING_RATE,
+        experiment_name=experiment_name,
         model_kwargs=model_cfg,
-        preprocess_config=preproc_cfg
+        preprocess_config=preproc_cfg,
+        use_cache=USE_CACHE,
     )
-
-    # Option 2: Train WITHOUT preprocessing (for comparison)
-    # no_preproc_cfg = PreprocessingConfig.no_preprocessing()
-    # model_cfg_raw = model_cfg.copy()
-    # model_cfg_raw['seq_length'] = 7680  # 256 Hz * 30 sec
-    # 
-    # model_raw = train_epochtransformer(
-    #     num_epochs=20,
-    #     batch_size=4,
-    #     lr=1e-3,
-    #     experiment_name="epoch_transformer_raw_v1",
-    #     model_kwargs=model_cfg_raw,
-    #     preprocess_config=no_preproc_cfg,
-    # )
