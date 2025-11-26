@@ -33,7 +33,7 @@ class EpochTransformer(nn.Module):
         self.original_seq_length = seq_length
 
         # Compute patch size to get ≤1024 tokens
-        MAX_TOKENS = 512   # SHOULD BE in {1024, 512, 256}!
+        MAX_TOKENS = 1024   # SHOULD BE in {1024, 512, 256}!
         self.patch_size = math.ceil(seq_length / MAX_TOKENS)
         self.final_seq_length = seq_length // self.patch_size
 

@@ -7,6 +7,8 @@ from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 from sklearn.metrics import f1_score
 import numpy as np
+import random, os
+random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.manual_seed(42); torch.cuda.manual_seed_all(42)
 
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
@@ -64,18 +66,20 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,      # evtl try with more workers later
+        num_workers=2,      # evtl try with more workers later
         drop_last=False,
         pin_memory=True,
+        persistent_workers=True,    # optional
     )
 
     val_loader = DataLoader(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,    # evtl try with more workers later
+        num_workers=2,    # evtl try with more workers later
         drop_last=False,
         pin_memory=True,
+        persistent_workers=True,    # optional
     )
 
     return train_loader, val_loader
@@ -232,7 +236,7 @@ def train_epochtransformer(
     class_names = ['Wake', 'N1', 'N2', 'N3', 'REM']
     
     # Loss function and optimizer
-    if class_weighted_loss:
+    if class_weighted_loss:     # "balanced class weighting"
         class_weights = compute_class_weights(train_loader, num_classes=5).to(device)
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -240,6 +244,14 @@ def train_epochtransformer(
         criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='max', factor=0.5, patience=6
+    )
+
+    # Early stopping state
+    early_stop_patience = 12
+    epochs_since_improvement = 0
+
     # Training loop
     global_step = 0
     best_val_acc = 0.0
@@ -266,6 +278,8 @@ def train_epochtransformer(
             loss = criterion(logits, y)
             
             loss.backward()
+            if class_weighted_loss:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             batch_loss = loss.item()
@@ -314,10 +328,14 @@ def train_epochtransformer(
         
         current_lr = optimizer.param_groups[0]['lr']
         writer.add_scalar('Learning_Rate', current_lr, epoch)
+
+        # Scheduler step (after val metrics)
+        scheduler.step(val_macro_f1)
         
         if val_macro_f1 > best_macro_f1:
             best_macro_f1 = val_macro_f1
             best_val_acc = val_accuracy
+            epochs_since_improvement = 0    # reset counter
             checkpoint_file = checkpoint_path / "best_model.pt"
             torch.save({
                 'epoch': epoch,
@@ -331,6 +349,15 @@ def train_epochtransformer(
                 'preprocessing': preprocess_config.to_dict(),
             }, checkpoint_file)
             print(f"✓ Saved best model (macro F1: {val_macro_f1:.4f})")
+        else:
+            epochs_since_improvement += 1
+            print(f"No improvement in macro F1 for {epochs_since_improvement} epoch(s).")
+        
+        # Early stopping condition
+        if epochs_since_improvement >= early_stop_patience:
+            print(f"\nEarly stopping triggered (no macro F1 improvement for {early_stop_patience} epochs).")
+            break
+
         
         latest_checkpoint = checkpoint_path / "latest_model.pt"
         torch.save({
@@ -366,7 +393,7 @@ if __name__ == "__main__":
     # CONFIG_NAME = "only_znorm"                     # Just normalization
     
     # Training hyperparameters
-    NUM_EPOCHS = 10
+    NUM_EPOCHS = 120
     BATCH_SIZE = 64     # look at GPU memory and choose in {32, 64, 128, 256}
     LEARNING_RATE = 1e-3
     USE_CACHE = True  # Set to False to disable caching
@@ -391,7 +418,7 @@ if __name__ == "__main__":
     }
     
     # Generate experiment name based on config
-    VERSION = 1
+    VERSION = 2     # CHANGE for each new run
     experiment_name = f"epochtransformer_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with preprocessing config: {CONFIG_NAME}")
