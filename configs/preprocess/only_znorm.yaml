@@ -7,4 +7,4 @@ bandpass_h_freq: null
 apply_resample: false
 resample_freq: null
 apply_znorm: true
-znorm_per_channel: true
+apply_per_night_znorm: false  # epoch-wise z-normalization

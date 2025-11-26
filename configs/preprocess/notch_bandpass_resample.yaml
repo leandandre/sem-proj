@@ -2,9 +2,9 @@
 apply_notch: true
 notch_freqs: [50.0, 100.0]
 apply_bandpass: true
-bandpass_l_freq: 0.5
-bandpass_h_freq: 40.0
+bandpass_l_freq: 0.3
+bandpass_h_freq: 30.0
 apply_resample: true
 resample_freq: 128.0
 apply_znorm: false
-znorm_per_channel: true
+apply_per_night_znorm: false  # epoch-wise z-normalization

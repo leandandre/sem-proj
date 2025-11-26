@@ -16,23 +16,15 @@ class PreprocessingConfig:
     Configuration for EEG preprocessing pipeline.
     All steps are optional and can be toggled independently.
     """
-    # Notch filtering (power line noise removal)
     apply_notch: bool = True
-    notch_freqs: list[float] = None  # e.g., [50.0, 100.0]
-    
-    # Bandpass filtering
+    notch_freqs: list[float] = None
     apply_bandpass: bool = True
-    bandpass_l_freq: Optional[float] = 0.5  # Hz
-    bandpass_h_freq: Optional[float] = 40.0  # Hz
-    
-    # Resampling
+    bandpass_l_freq: Optional[float] = 0.5
+    bandpass_h_freq: Optional[float] = 40.0
     apply_resample: bool = True
-    resample_freq: Optional[float] = 128.0  # Hz
-    
-    # Z-normalization (per-subject, artifact-free)
+    resample_freq: Optional[float] = 128.0
     apply_znorm: bool = True
-    znorm_per_channel: bool = True  # If False, normalize across all channels
-    # apply_per_night_znorm: bool = False # If True, normalize per night recording, else per window
+    apply_per_night_znorm: bool = False  # False = epoch-wise (local), True = whole-night per-channel
     
     def __post_init__(self):
         """Set default notch frequencies if not provided."""
@@ -57,7 +49,6 @@ class PreprocessingConfig:
     
     @classmethod
     def default_config(cls) -> 'PreprocessingConfig':
-        """Default: all preprocessing enabled."""
         return cls(
             apply_notch=True,
             notch_freqs=[50.0, 100.0],
@@ -67,7 +58,7 @@ class PreprocessingConfig:
             apply_resample=True,
             resample_freq=128.0,
             apply_znorm=True,
-            znorm_per_channel=True,
+            apply_per_night_znorm=False,  # default to epoch-wise
         )
     
     @classmethod
@@ -166,56 +157,23 @@ def compute_subject_normalization_stats(
     config: PreprocessingConfig,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Compute mean and std for z-normalization across valid (non-artifact/interruptic) epochs.
-    
-    Parameters
-    ----------
-    raw : mne.io.BaseRaw
-        Preprocessed raw data (after notch/bandpass/resample).
-    valid_mask : np.ndarray, shape (N_epochs,)
-        Boolean mask: True for valid epochs (not artifacts/interruptions).
-    bounds : np.ndarray, shape (N_epochs, 2)
-        [start, stop) sample indices for each epoch.
-    config : PreprocessingConfig
-        Config to check if normalization is enabled.
-    
-    Returns
-    -------
-    mean : np.ndarray, shape (n_channels,) or scalar
-        Mean per channel (or global).
-    std : np.ndarray, shape (n_channels,) or scalar
-        Std per channel (or global).
+    If apply_per_night_znorm is True: compute per-channel mean/std across all valid epochs.
+    Else: return (None, None) so epoch-wise z-norm will be used later.
     """
-    if not config.apply_znorm:
-        return None, None
+    if not config.apply_znorm or not config.apply_per_night_znorm:
+        return None, None  # epoch-wise path
     
-    # Collect all valid samples
     valid_data = []
     for i, is_valid in enumerate(valid_mask):
         if is_valid:
-            start, stop = bounds[i]
-            epoch_data = raw.get_data(start=start, stop=stop)  # (n_channels, n_samples)
-            valid_data.append(epoch_data)
-    
+            s, e = bounds[i]
+            valid_data.append(raw.get_data(start=s, stop=e))
     if len(valid_data) == 0:
-        print("  WARNING: No valid epochs for normalization!")
         n_channels = raw.get_data().shape[0]
         return np.zeros(n_channels), np.ones(n_channels)
-    
-    # Concatenate all valid epochs
-    valid_data = np.concatenate(valid_data, axis=1)  # (n_channels, total_valid_samples)
-    
-    # Compute statistics
-    if config.znorm_per_channel:
-        mean = valid_data.mean(axis=1, keepdims=True)  # (n_channels, 1)
-        std = valid_data.std(axis=1, keepdims=True) + 1e-8  # (n_channels, 1)
-        mean = mean.squeeze()  # (n_channels,)
-        std = std.squeeze()    # (n_channels,)
-    else:
-        # Global normalization across all channels
-        mean = valid_data.mean()
-        std = valid_data.std() + 1e-8
-    
+    valid_data = np.concatenate(valid_data, axis=1)  # (channels, samples)
+    mean = valid_data.mean(axis=1)
+    std = valid_data.std(axis=1) + 1e-8
     return mean, std
 
 
@@ -226,31 +184,18 @@ def apply_znorm_to_epoch(
     config: PreprocessingConfig,
 ) -> np.ndarray:
     """
-    Apply z-normalization to a single epoch.
-    
-    Parameters
-    ----------
-    epoch_data : np.ndarray, shape (n_channels, n_samples)
-        Single epoch data.
-    mean, std : np.ndarray
-        Normalization statistics from compute_subject_normalization_stats.
-    config : PreprocessingConfig
-        Config (to check if normalization is enabled).
-    
-    Returns
-    -------
-    np.ndarray, shape (n_channels, n_samples)
-        Normalized epoch.
+    Epoch-wise per-channel z-norm (default).
+    If apply_per_night_znorm True and mean/std provided, use those.
     """
-    if not config.apply_znorm or mean is None:
+    if not config.apply_znorm:
         return epoch_data
-    
-    if config.znorm_per_channel:
-        # mean, std: (n_channels,)
-        mean = mean[:, np.newaxis]  # (n_channels, 1)
-        std = std[:, np.newaxis]    # (n_channels, 1)
-    
-    return (epoch_data - mean) / std
+    # Night (global) stats path
+    if config.apply_per_night_znorm and mean is not None and std is not None:
+        return (epoch_data - mean[:, None]) / (std[:, None])
+    # Epoch-wise path
+    m = epoch_data.mean(axis=1, keepdims=True)
+    s = epoch_data.std(axis=1, keepdims=True) + 1e-8
+    return (epoch_data - m) / s
 
 
 def get_expected_seq_length(config: PreprocessingConfig, epoch_duration_sec: int = 30) -> int:

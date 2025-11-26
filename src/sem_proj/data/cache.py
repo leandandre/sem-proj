@@ -128,9 +128,9 @@ def save_to_cache(
         'bounds': bounds,
         'labels': labels,
         'valid_mask': valid_mask,
-        'norm_mean': norm_mean,
-        'norm_std': norm_std,
-        'config_hash': get_cache_key(subject, config, mode),  # For verification
+        'norm_mean': norm_mean,  # may be None for epoch-wise
+        'norm_std': norm_std,    # may be None for epoch-wise
+        'config_hash': get_cache_key(subject, config, mode),
     }
     
     try:

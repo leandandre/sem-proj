@@ -174,19 +174,18 @@ class BoasDataset(Dataset):
                 raw_hb_selected.pick(raw_hb_selected.ch_names[:N_HB_CHANNELS])
                 
                 valid_for_norm_hb = self.valid_psg[subj] & self.valid_hb_ai[subj]
+                # Only compute night stats if flag enabled
                 mean_hb, std_hb = compute_subject_normalization_stats(
                     raw_hb_selected,
                     valid_for_norm_hb,
                     self.bounds_hb[subj],
                     self.preprocess_config,
                 )
-                self.norm_stats_hb[subj] = (mean_hb, std_hb)
+                self.norm_stats_hb[subj] = (mean_hb, std_hb)  # may be (None, None)
                 
-                # Store as numpy array (lighter than mne.Raw)
                 self.raw_data_hb[subj] = raw_hb_selected.get_data()
                 self.sfreq_hb[subj] = raw_hb_selected.info['sfreq']
                 
-                # SAVE TO CACHE
                 if self.use_cache:
                     save_to_cache(
                         subject=subj,
@@ -198,10 +197,10 @@ class BoasDataset(Dataset):
                         bounds=self.bounds_hb[subj],
                         labels=labels_psg,
                         valid_mask=valid_for_norm_hb,
-                        norm_mean=mean_hb,
-                        norm_std=std_hb,
+                        norm_mean=mean_hb,   # None if epoch-wise
+                        norm_std=std_hb,     # None if epoch-wise
                     )
-            
+
             if self.mode in {"psg", "cross"}:
                 raw_psg_selected = raw_psg.copy()
                 raw_psg_selected.pick(raw_psg_selected.ch_names[:N_PSG_CHANNELS])
@@ -215,11 +214,9 @@ class BoasDataset(Dataset):
                 )
                 self.norm_stats_psg[subj] = (mean_psg, std_psg)
                 
-                # Store as numpy array
                 self.raw_data_psg[subj] = raw_psg_selected.get_data()
                 self.sfreq_psg[subj] = raw_psg_selected.info['sfreq']
                 
-                # SAVE TO CACHE
                 if self.use_cache:
                     save_to_cache(
                         subject=subj,
@@ -261,14 +258,11 @@ class BoasDataset(Dataset):
 
         if self.mode == "headband":
             start, stop = self.bounds_hb[subj][epoch_idx]
-            # Extract from numpy array instead of mne.Raw
             x_hb = self.raw_data_hb[subj][:, start:stop]
-            
-            # Apply z-normalization
-            mean_hb, std_hb = self.norm_stats_hb[subj]
+            mean_hb, std_hb = self.norm_stats_hb[subj]  # (None, None) if epoch-wise
             x_hb = apply_znorm_to_epoch(x_hb, mean_hb, std_hb, self.preprocess_config)
             
-            x_hb = torch.from_numpy(x_hb).float()
+            x_hb = torch.from_numpy(x_hb).float()   # Shape: (2, 3840)
             if self.transform_hb is not None:
                 x_hb = self.transform_hb(x_hb)
             return x_hb, y
@@ -276,8 +270,7 @@ class BoasDataset(Dataset):
         if self.mode == "psg":
             start, stop = self.bounds_psg[subj][epoch_idx]
             x_psg = self.raw_data_psg[subj][:, start:stop]
-            
-            mean_psg, std_psg = self.norm_stats_psg[subj]
+            mean_psg, std_psg = self.norm_stats_psg[subj]  # (None, None) if epoch-wise
             x_psg = apply_znorm_to_epoch(x_psg, mean_psg, std_psg, self.preprocess_config)
             
             x_psg = torch.from_numpy(x_psg).float()

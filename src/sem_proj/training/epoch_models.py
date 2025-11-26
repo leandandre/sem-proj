@@ -19,6 +19,28 @@ CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 LOG_DIR = PROJECT_ROOT / "logs"
 CONFIG_DIR = PROJECT_ROOT / "configs" / "preprocess"
 
+# Utility function to compute class weights to handle class imbalance
+def compute_class_weights(dataloader, num_classes=5):
+    """Compute inverse frequency class weights."""
+    from collections import Counter
+    
+    all_labels = []
+    for _, y in dataloader:
+        all_labels.extend(y.numpy())
+    
+    counter = Counter(all_labels)
+    total = len(all_labels)
+    
+    # Inverse frequency weights
+    weights = []
+    for class_idx in range(num_classes):
+        count = counter.get(class_idx, 1)  # Avoid division by zero
+        weight = total / (num_classes * count)
+        weights.append(weight)
+    
+    return torch.tensor(weights, dtype=torch.float32)
+
+
 
 def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[PreprocessingConfig] = None, use_cache: bool = True):
     # Load fixed splits
@@ -42,7 +64,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=0,      # evtl try with more workers later
         drop_last=False,
         pin_memory=True,
     )
@@ -51,7 +73,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=0,    # evtl try with more workers later
         drop_last=False,
         pin_memory=True,
     )
@@ -127,6 +149,7 @@ def train_epochtransformer(
     model_kwargs: dict | None = None,
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
+    class_weighted_loss: bool = False,
 ):
     """
     Train EpochTransformer model.
@@ -197,9 +220,6 @@ def train_epochtransformer(
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model has {num_params:,} trainable parameters\n")
     
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    
     # Create dataloaders
     train_loader, val_loader = make_dataloaders(
         batch_size=batch_size, 
@@ -210,6 +230,15 @@ def train_epochtransformer(
     print(f"Validation samples: {len(val_loader.dataset)}\n")
 
     class_names = ['Wake', 'N1', 'N2', 'N3', 'REM']
+    
+    # Loss function and optimizer
+    if class_weighted_loss:
+        class_weights = compute_class_weights(train_loader, num_classes=5).to(device)
+        print(f"\nClass weights: {class_weights.cpu().numpy()}")
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
     # Training loop
     global_step = 0
@@ -337,8 +366,8 @@ if __name__ == "__main__":
     # CONFIG_NAME = "only_znorm"                     # Just normalization
     
     # Training hyperparameters
-    NUM_EPOCHS = 20
-    BATCH_SIZE = 8
+    NUM_EPOCHS = 10
+    BATCH_SIZE = 64     # look at GPU memory and choose in {32, 64, 128, 256}
     LEARNING_RATE = 1e-3
     USE_CACHE = True  # Set to False to disable caching
     
@@ -353,16 +382,17 @@ if __name__ == "__main__":
     # Model config (seq_length is automatically determined from preprocessing)
     model_cfg = {
         'input_channels': 2,
-        'd_model': 64,
-        'nhead': 8,
+        'd_model': 32,  # Reduced model size for testing, change to 64 later
+        'nhead': 8,     # 4 or 8 heads
         'num_layers': 4,
-        'dim_feedforward': 256,
+        'dim_feedforward': 128,     # always d_model * 4
         'dropout': 0.2,
         'num_classes': 5,
     }
     
     # Generate experiment name based on config
-    experiment_name = f"epochtransformer_{CONFIG_NAME}_v1"
+    VERSION = 1
+    experiment_name = f"epochtransformer_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with preprocessing config: {CONFIG_NAME}")
     print(f" Config file: {config_file}")
@@ -375,4 +405,5 @@ if __name__ == "__main__":
         model_kwargs=model_cfg,
         preprocess_config=preproc_cfg,
         use_cache=USE_CACHE,
+        class_weighted_loss=True,
     )
