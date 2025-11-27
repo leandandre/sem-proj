@@ -12,7 +12,7 @@ random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.ma
 
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
-from sem_proj.models.model_factory import EpochTransformer
+from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
 
 # Project root = .../sem-proj
@@ -154,6 +154,7 @@ def train_epochtransformer(
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
     class_weighted_loss: bool = False,
+    use_conv1d: bool = False,
 ):
     """
     Train EpochTransformer model.
@@ -219,7 +220,13 @@ def train_epochtransformer(
                   f"Using seq_length={seq_length} from preprocessing config.")
             default_model_cfg['seq_length'] = seq_length
 
-    model = EpochTransformer(**default_model_cfg).to(device)
+    # Choose model architecture
+    if use_conv1d:
+        model = EpochTransformerConv1D(**default_model_cfg).to(device)
+        print("Using Conv1D patch embedding")
+    else:
+        model = EpochTransformer(**default_model_cfg).to(device)
+        print("Using mean-pooling patch embedding")
     
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model has {num_params:,} trainable parameters\n")
@@ -397,6 +404,9 @@ if __name__ == "__main__":
     BATCH_SIZE = 64     # look at GPU memory and choose in {32, 64, 128, 256}
     LEARNING_RATE = 1e-3
     USE_CACHE = True  # Set to False to disable caching
+
+    MAX_TOKENS = 512   # SHOULD BE in {1024, 512, 256}!!!!!
+    USE_CONV1D = False  # Set to True to use Conv1D patch embedding
     
     
     # Load preprocessing config
@@ -415,13 +425,15 @@ if __name__ == "__main__":
         'dim_feedforward': 128,     # always d_model * 4
         'dropout': 0.2,
         'num_classes': 5,
+        'max_tokens': MAX_TOKENS
     }
     
     # Generate experiment name based on config
-    VERSION = 2     # CHANGE for each new run
-    experiment_name = f"epochtransformer_{CONFIG_NAME}_v{VERSION}"
+    VERSION = 3     # CHANGE for each new run
+    model_type = "conv1d" if USE_CONV1D else "meanpool"
+    experiment_name = f"epochtransformer_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
-    print(f"\n Starting training with preprocessing config: {CONFIG_NAME}")
+    print(f"\n Starting training with {'Conv1D' if USE_CONV1D else 'MeanPooling'} model")
     print(f" Config file: {config_file}")
     
     model = train_epochtransformer(
@@ -432,5 +444,6 @@ if __name__ == "__main__":
         model_kwargs=model_cfg,
         preprocess_config=preproc_cfg,
         use_cache=USE_CACHE,
-        class_weighted_loss=True,
+        class_weighted_loss=False,
+        use_conv1d=USE_CONV1D,
     )
