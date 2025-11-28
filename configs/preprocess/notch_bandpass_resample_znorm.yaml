@@ -10,4 +10,4 @@ apply_resample: true
 resample_freq: 128.0
 
 apply_znorm: true
-apply_per_night_znorm: false  # epoch-wise z-normalization
+apply_per_night_znorm: true  # epoch-wise z-normalization

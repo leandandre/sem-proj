@@ -217,8 +217,12 @@ class EpochTransformerConv1D(nn.Module):
             bias=True
         )
 
-        # Optional: additional Conv1D layer to refine token representations
+        # Optional: additional Conv1D layer(s) to refine token representations
         self.token_refine = nn.Sequential(
+            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=1, bias=False),
+            nn.BatchNorm1d(d_model),
+            nn.GELU(),
+
             nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=1, bias=False),
             nn.BatchNorm1d(d_model),
             nn.GELU()

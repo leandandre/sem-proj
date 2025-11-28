@@ -192,7 +192,7 @@ def train_epochtransformer(
     print(f"{'='*60}")
     print(f"Experiment: {experiment_name}")
     print(f"Device: {device}")
-    print(f"Expected sequence length: {seq_length}")
+    print(f"Expected window length: {seq_length} timepoints")
     print(f"Batch size: {batch_size}")
     print(f"Learning rate: {lr}")
     print(f"Epochs: {num_epochs}")
@@ -254,6 +254,25 @@ def train_epochtransformer(
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='max', factor=0.5, patience=6
     )
+
+    # Create complete training config dictionary
+    training_config = {
+        'num_epochs': num_epochs,
+        'batch_size': batch_size,
+        'learning_rate': lr,
+        'use_cache': use_cache,
+        'class_weighted_loss': class_weighted_loss,
+        'use_conv1d': use_conv1d,
+        'model_type': 'EpochTransformerConv1D' if use_conv1d else 'EpochTransformer',
+        'optimizer': 'Adam',
+        'scheduler': 'ReduceLROnPlateau',
+        'scheduler_patience': 6,
+        'scheduler_factor': 0.5,
+        'early_stop_patience': 12,
+        'num_trainable_params': num_params,
+        'train_samples': len(train_loader.dataset),
+        'val_samples': len(val_loader.dataset),
+    }
 
     # Early stopping state
     early_stop_patience = 12
@@ -354,6 +373,8 @@ def train_epochtransformer(
                 'val_per_class_f1': val_per_class_f1.tolist(),
                 'hyperparameters': default_model_cfg,
                 'preprocessing': preprocess_config.to_dict(),
+                'training_config': training_config,
+                'class_weights': class_weights.cpu().tolist() if class_weighted_loss else None,  # ADD THIS
             }, checkpoint_file)
             print(f"✓ Saved best model (macro F1: {val_macro_f1:.4f})")
         else:
@@ -375,6 +396,9 @@ def train_epochtransformer(
             'val_loss': val_loss,
             'val_macro_f1': val_macro_f1,
             'val_per_class_f1': val_per_class_f1.tolist(),
+            'hyperparameters': default_model_cfg,
+            'preprocessing': preprocess_config.to_dict(),
+            'training_config': training_config,
         }, latest_checkpoint)
     
     print(f"\n{'='*60}")
@@ -401,12 +425,20 @@ if __name__ == "__main__":
     
     # Training hyperparameters
     NUM_EPOCHS = 120
-    BATCH_SIZE = 64     # look at GPU memory and choose in {32, 64, 128, 256}
+    BATCH_SIZE = 128     # look at GPU memory and choose in {32, 64, 128, 256}
     LEARNING_RATE = 1e-3
     USE_CACHE = True  # Set to False to disable caching
 
-    MAX_TOKENS = 512   # SHOULD BE in {1024, 512, 256}!!!!!
-    USE_CONV1D = False  # Set to True to use Conv1D patch embedding
+    WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
+
+    USE_CONV1D = True  # Set to True to use Conv1D patch embedding
+    
+    D_MODEL = 64  # Reduced model size for testing, change to 64 later
+    N_HEAD = 8     # 4 or 8 heads
+    NUM_LAYERS = 4
+    DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
+    DROPOUT = 0.2
+    MAX_TOKENS = 256   # SHOULD BE in {1024, 512, 256}!!!!!
     
     
     # Load preprocessing config
@@ -418,18 +450,18 @@ if __name__ == "__main__":
     
     # Model config (seq_length is automatically determined from preprocessing)
     model_cfg = {
-        'input_channels': 2,
-        'd_model': 32,  # Reduced model size for testing, change to 64 later
-        'nhead': 8,     # 4 or 8 heads
-        'num_layers': 4,
-        'dim_feedforward': 128,     # always d_model * 4
-        'dropout': 0.2,
-        'num_classes': 5,
+        'input_channels': 2,    # fixed for headband data
+        'd_model': D_MODEL,
+        'nhead': N_HEAD,
+        'num_layers': NUM_LAYERS,
+        'dim_feedforward': DIM_FEEDFORWARD,
+        'dropout': DROPOUT,
+        'num_classes': 5,       # fixed for 5 sleep stages
         'max_tokens': MAX_TOKENS
     }
     
     # Generate experiment name based on config
-    VERSION = 3     # CHANGE for each new run
+    VERSION = 1     # CHANGE for each new run
     model_type = "conv1d" if USE_CONV1D else "meanpool"
     experiment_name = f"epochtransformer_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
@@ -444,6 +476,6 @@ if __name__ == "__main__":
         model_kwargs=model_cfg,
         preprocess_config=preproc_cfg,
         use_cache=USE_CACHE,
-        class_weighted_loss=False,
+        class_weighted_loss=WEIGHTED_LOSS,
         use_conv1d=USE_CONV1D,
     )

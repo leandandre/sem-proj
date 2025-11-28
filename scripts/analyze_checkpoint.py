@@ -26,7 +26,7 @@ def load_checkpoint(experiment_name: str, checkpoint_name: str = "best_model.pt"
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
     print(f"Loading checkpoint: {checkpoint_path}\n")
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     
     return checkpoint
 
@@ -59,7 +59,7 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     print("-" * 80)
     
     for class_name, f1 in zip(class_names, per_class_f1):
-        bar_length = int(f1 * 50)  # Scale to 50 chars max
+        bar_length = int(f1 * 50)
         bar = '█' * bar_length
         print(f"{class_name:<10} {f1:.4f}       {bar}")
     
@@ -67,7 +67,10 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     print(f"\n🧠 MODEL ARCHITECTURE")
     print("-" * 80)
     hyperparams = checkpoint['hyperparameters']
+    print(f"Model type:          {checkpoint.get('training_config', {}).get('model_type', 'Unknown')}")
     print(f"Input channels:      {hyperparams['input_channels']}")
+    print(f"Sequence length:     {hyperparams['seq_length']}")
+    print(f"Max tokens:          {hyperparams.get('max_tokens', 'N/A')}")
     print(f"Embedding dim:       {hyperparams['d_model']}")
     print(f"Attention heads:     {hyperparams['nhead']}")
     print(f"Transformer layers:  {hyperparams['num_layers']}")
@@ -75,8 +78,34 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     print(f"Dropout:             {hyperparams['dropout']}")
     print(f"Number of classes:   {hyperparams['num_classes']}")
     
+    # Training configuration
+    if 'training_config' in checkpoint:
+        print(f"\n⚙️  TRAINING CONFIGURATION")
+        print("-" * 80)
+        train_cfg = checkpoint['training_config']
+        print(f"Batch size:          {train_cfg.get('batch_size', 'N/A')}")
+        print(f"Learning rate:       {train_cfg.get('learning_rate', 'N/A')}")
+        print(f"Optimizer:           {train_cfg.get('optimizer', 'N/A')}")
+        print(f"LR Scheduler:        {train_cfg.get('scheduler', 'N/A')}")
+        print(f"  - Patience:        {train_cfg.get('scheduler_patience', 'N/A')}")
+        print(f"  - Factor:          {train_cfg.get('scheduler_factor', 'N/A')}")
+        print(f"Early stop patience: {train_cfg.get('early_stop_patience', 'N/A')}")
+        print(f"Class weighted loss: {train_cfg.get('class_weighted_loss', 'N/A')}")
+        print(f"Used cache:          {train_cfg.get('use_cache', 'N/A')}")
+        print(f"Trainable params:    {train_cfg.get('num_trainable_params', 'N/A'):,}")
+        print(f"Training samples:    {train_cfg.get('train_samples', 'N/A'):,}")
+        print(f"Validation samples:  {train_cfg.get('val_samples', 'N/A'):,}")
+    
+    # Class weights (if used)
+    if checkpoint.get('class_weights') is not None:
+        print(f"\n⚖️  CLASS WEIGHTS")
+        print("-" * 80)
+        class_weights = checkpoint['class_weights']
+        for class_name, weight in zip(class_names, class_weights):
+            print(f"{class_name:<10} {weight:.4f}")
+    
     # Preprocessing configuration
-    print(f"\n⚙️  PREPROCESSING CONFIGURATION")
+    print(f"\n🔧 PREPROCESSING CONFIGURATION")
     print("-" * 80)
     preprocess = checkpoint['preprocessing']
     for key, value in preprocess.items():
@@ -234,7 +263,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Analyze model checkpoint')
-    parser.add_argument('experiment', type=str, 
+    parser.add_argument('experiment', type=str, nargs='?', default=None,
                        help='Experiment name (e.g., epochtransformer_notch_bandpass_resample_znorm_v1)')
     parser.add_argument('--checkpoint', type=str, default='best_model.pt',
                        help='Checkpoint file name (default: best_model.pt)')
@@ -249,7 +278,7 @@ def main():
         # Compare multiple experiments
         print(f"\nComparing {len(args.compare)} experiments...\n")
         compare_checkpoints(args.compare)
-    else:
+    elif args.experiment:
         # Analyze single experiment
         checkpoint = load_checkpoint(args.experiment, args.checkpoint)
         print_checkpoint_info(checkpoint, args.experiment)
@@ -267,6 +296,12 @@ def main():
         else:
             plot_per_class_f1(checkpoint, args.experiment)
             plot_confusion_style_summary(checkpoint, args.experiment)
+    else:
+        parser.print_help()
+        print("\nAvailable checkpoints:")
+        for exp_dir in CHECKPOINT_DIR.iterdir():
+            if exp_dir.is_dir():
+                print(f"  - {exp_dir.name}")
 
 
 if __name__ == "__main__":

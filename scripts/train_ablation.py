@@ -4,7 +4,7 @@ import csv
 import time
 from pathlib import Path
 
-# Add project root to PYTHONPATH so we can import sem_proj.*
+# Add project root to PYTHONPATH
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -20,8 +20,7 @@ def load_best_metrics(experiment_name: str):
     ckpt_path = CHECKPOINT_DIR / experiment_name / "best_model.pt"
     if not ckpt_path.exists():
         return None
-    ckpt = torch.load(ckpt_path, map_name='cpu' if hasattr(torch, 'load') else 'cpu')
-    # Fallback for standard torch.load API
+    ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     if isinstance(ckpt, dict):
         return {
             "epoch": ckpt.get("epoch", None),
@@ -31,29 +30,30 @@ def load_best_metrics(experiment_name: str):
             "val_per_class_f1": ckpt.get("val_per_class_f1", None),
             "hyperparameters": ckpt.get("hyperparameters", {}),
             "preprocessing": ckpt.get("preprocessing", {}),
+            "training_config": ckpt.get("training_config", {}),
         }
     return None
 
 
 def main():
-    # Grid
+    # Grid of hyperparameters to test
     D_MODELS = [32, 64, 128]
-    MAX_TOKENS_LIST = [1024, 512]
+    MAX_TOKENS_LIST = [512, 256]  # Changed from [1024, 512]
     PREPROC_LIST = [
         "notch_bandpass_resample_znorm",
         "notch_bandpass_resample",
         "notch_bandpass",
     ]
 
-    # Fixed training settings (adjust as needed)
-    NUM_EPOCHS = 150
-    BATCH_SIZE = 64
+    # Fixed training settings
+    NUM_EPOCHS = 120
+    BATCH_SIZE = 128
     LEARNING_RATE = 1e-3
     USE_CACHE = True
-    CLASS_WEIGHTED_LOSS = True
-    USE_CONV1D = True  # Set True to use the Conv1D patch embedding variant
+    CLASS_WEIGHTED_LOSS = False
+    USE_CONV1D = True  # Changed to True for Conv1D model
 
-    # Fixed transformer depth/heads; ensure d_model % nhead == 0
+    # Fixed transformer architecture
     NHEAD = 8
     NUM_LAYERS = 4
     DROPOUT = 0.2
@@ -61,6 +61,9 @@ def main():
 
     results = []
     start_all = time.time()
+
+    total_runs = len(PREPROC_LIST) * len(MAX_TOKENS_LIST) * len(D_MODELS)
+    current_run = 0
 
     for preproc_name in PREPROC_LIST:
         # Load preprocessing config
@@ -72,6 +75,8 @@ def main():
 
         for max_tokens in MAX_TOKENS_LIST:
             for d_model in D_MODELS:
+                current_run += 1
+                
                 if d_model % NHEAD != 0:
                     print(f"Skipping d_model={d_model} (not divisible by nhead={NHEAD})")
                     continue
@@ -84,7 +89,7 @@ def main():
                 )
 
                 print("\n" + "=" * 80)
-                print(f"RUN: {experiment_name}")
+                print(f"RUN {current_run}/{total_runs}: {experiment_name}")
                 print("=" * 80)
 
                 model_cfg = {
@@ -113,6 +118,9 @@ def main():
                     )
                 except Exception as e:
                     print(f"ERROR in run {experiment_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
                     results.append({
                         "experiment": experiment_name,
                         "preprocessing": preproc_name,
@@ -124,6 +132,8 @@ def main():
                         "dropout": DROPOUT,
                         "class_weighted_loss": CLASS_WEIGHTED_LOSS,
                         "use_conv1d": USE_CONV1D,
+                        "batch_size": BATCH_SIZE,
+                        "learning_rate": LEARNING_RATE,
                         "status": "failed",
                         "error": str(e),
                         "duration_min": round((time.time() - run_start) / 60, 2),
@@ -147,15 +157,19 @@ def main():
                         "dropout": DROPOUT,
                         "class_weighted_loss": CLASS_WEIGHTED_LOSS,
                         "use_conv1d": USE_CONV1D,
+                        "batch_size": BATCH_SIZE,
+                        "learning_rate": LEARNING_RATE,
                         "status": "no_checkpoint",
                         "duration_min": duration_min,
                     })
                 else:
-                    print(f"✓ Completed {experiment_name} | "
-                          f"Val Macro F1={metrics['val_macro_f1']:.4f} | "
-                          f"Val Acc={metrics['val_accuracy']:.4f} | "
-                          f"Best epoch={metrics['epoch'] + 1 if metrics['epoch'] is not None else 'NA'} | "
-                          f"Time={duration_min} min")
+                    training_cfg = metrics.get('training_config', {})
+                    
+                    print(f"✓ Completed {experiment_name}")
+                    print(f"  Val Macro F1: {metrics['val_macro_f1']:.4f}")
+                    print(f"  Val Accuracy: {metrics['val_accuracy']:.4f}")
+                    print(f"  Best epoch:   {metrics['epoch'] + 1 if metrics['epoch'] is not None else 'NA'}")
+                    print(f"  Duration:     {duration_min:.1f} min")
 
                     results.append({
                         "experiment": experiment_name,
@@ -168,6 +182,9 @@ def main():
                         "dropout": DROPOUT,
                         "class_weighted_loss": CLASS_WEIGHTED_LOSS,
                         "use_conv1d": USE_CONV1D,
+                        "batch_size": BATCH_SIZE,
+                        "learning_rate": LEARNING_RATE,
+                        "num_trainable_params": training_cfg.get('num_trainable_params', None),
                         "status": "ok",
                         "val_loss": round(float(metrics["val_loss"]), 6) if metrics["val_loss"] is not None else None,
                         "val_accuracy": round(float(metrics["val_accuracy"]), 6) if metrics["val_accuracy"] is not None else None,
@@ -178,8 +195,12 @@ def main():
                     })
 
     total_min = round((time.time() - start_all) / 60, 2)
+    total_hours = round(total_min / 60, 2)
+    
     print("\n" + "=" * 80)
-    print(f"Ablation finished in {total_min} min. Writing summary...")
+    print(f"ABLATION STUDY COMPLETE!")
+    print(f"Total time: {total_min:.1f} min ({total_hours:.1f} hours)")
+    print(f"Completed runs: {len([r for r in results if r['status'] == 'ok'])}/{total_runs}")
     print("=" * 80)
 
     # Save JSON and CSV summaries
@@ -194,7 +215,8 @@ def main():
     fieldnames = [
         "experiment", "status", "preprocessing", "use_conv1d",
         "d_model", "dim_feedforward", "nhead", "num_layers",
-        "dropout", "max_tokens", "class_weighted_loss",
+        "dropout", "max_tokens", "batch_size", "learning_rate",
+        "class_weighted_loss", "num_trainable_params",
         "val_loss", "val_accuracy", "val_macro_f1",
         "best_epoch", "duration_min",
     ]
@@ -205,19 +227,25 @@ def main():
             row = {k: r.get(k, None) for k in fieldnames}
             writer.writerow(row)
 
-    # Print top-5 by macro F1
+    # Print top-10 by macro F1
     ok_runs = [r for r in results if r.get("status") == "ok" and r.get("val_macro_f1") is not None]
     ok_runs.sort(key=lambda r: r["val_macro_f1"], reverse=True)
 
-    print("\nTop runs by Macro F1:")
-    for i, r in enumerate(ok_runs[:5], 1):
-        print(f"{i:>2}. {r['experiment']}: Macro F1={r['val_macro_f1']:.4f}, "
-              f"Acc={r['val_accuracy']:.4f}, Preproc={r['preprocessing']}, "
-              f"d_model={r['d_model']}, tok={r['max_tokens']}, conv1d={r['use_conv1d']}")
+    print("\n" + "=" * 80)
+    print("TOP 10 RUNS BY MACRO F1:")
+    print("=" * 80)
+    for i, r in enumerate(ok_runs[:10], 1):
+        print(f"{i:>2}. {r['experiment']}")
+        print(f"    Macro F1:  {r['val_macro_f1']:.4f}")
+        print(f"    Accuracy:  {r['val_accuracy']:.4f}")
+        print(f"    d_model:   {r['d_model']}, max_tokens: {r['max_tokens']}")
+        print(f"    Preproc:   {r['preprocessing']}")
+        print(f"    Duration:  {r['duration_min']:.1f} min\n")
 
-    print(f"\nSummary files:")
+    print(f"\nSummary files saved:")
     print(f"  JSON: {summary_json}")
-    print(f"  CSV : {summary_csv}")
+    print(f"  CSV:  {summary_csv}")
+    print("\n" + "=" * 80)
 
 
 if __name__ == "__main__":
