@@ -1,4 +1,5 @@
 import math
+from matplotlib.pylab import rint
 import torch
 import torch.nn as nn
 
@@ -11,7 +12,7 @@ class EpochTransformer(nn.Module):
     """
     def __init__(
         self,
-        input_channels=2,      # N_HB_CHANNELS from your dataset
+        input_channels=2,      # N_HB_CHANNELS from the dataset
         seq_length=7680,       # Expected sequence length (e.g., 7680 for 256Hz*30s)
         d_model=64,            # embedding dimension
         nhead=8,               # number of attention heads
@@ -34,7 +35,7 @@ class EpochTransformer(nn.Module):
         self.original_seq_length = seq_length
         self.max_tokens = max_tokens
 
-        # Compute patch size to get ≤ max_tokens tokens
+        # Compute patch size to get less than max_tokens tokens
         self.patch_size = math.ceil(seq_length / self.max_tokens)
         self.final_seq_length = seq_length // self.patch_size
 
@@ -66,7 +67,7 @@ class EpochTransformer(nn.Module):
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            batch_first=True  # Important: expects (batch, seq, feature)
+            batch_first=True  # expects (batch, seq, feature)
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer,
@@ -76,7 +77,10 @@ class EpochTransformer(nn.Module):
         # Classification head
         self.classifier = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Linear(d_model, num_classes)
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, num_classes),
         )
 
     def _apply_patch_mean_pooling(self, x: torch.Tensor) -> torch.Tensor:
@@ -128,16 +132,18 @@ class EpochTransformer(nn.Module):
         """
         # x: (batch, channels, original_seq_length)
         batch_size = x.size(0)
-
+        # print(f"before pooling: {x.shape}")
         # Apply patch mean-pooling: (batch, channels, original_seq_length) 
         #                         -> (batch, channels, final_seq_length)
         x = self._apply_patch_mean_pooling(x)
+        # print(f"after pooling: {x.shape}")
         
         # Transpose for projection: (batch, final_seq_length, channels)
         x = x.transpose(1, 2)
         
         # Project to d_model: (batch, final_seq_length, d_model)
         x = self.input_projection(x)
+        # print(f"after input projection: {x.shape}")
 
         # Prepend CLS token
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # (batch, 1, d_model)
@@ -156,6 +162,24 @@ class EpochTransformer(nn.Module):
         logits = self.classifier(cls_output)  # (batch, num_classes)
         return logits
     
+
+
+class ResidualConvBlock(nn.Module):
+    def __init__(self, channels: int, kernel_size: int = 3, dilation: int = 1, dropout: float = 0.1):
+        super().__init__()
+        pad = (kernel_size // 2) * dilation
+        self.net = nn.Sequential(
+            nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=pad, dilation=dilation, bias=False),
+            nn.BatchNorm1d(channels),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=pad, dilation=dilation, bias=False),
+            nn.BatchNorm1d(channels),
+        )
+
+    def forward(self, x):
+        return F.gelu(x + self.net(x))   
+
 
 class EpochTransformerConv1D(nn.Module):
     """
@@ -219,13 +243,9 @@ class EpochTransformerConv1D(nn.Module):
 
         # Optional: additional Conv1D layer(s) to refine token representations
         self.token_refine = nn.Sequential(
-            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=1, bias=False),
-            nn.BatchNorm1d(d_model),
-            nn.GELU(),
-
-            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=1, bias=False),
-            nn.BatchNorm1d(d_model),
-            nn.GELU()
+            ResidualConvBlock(d_model, kernel_size=3, dilation=1, dropout=dropout),
+            ResidualConvBlock(d_model, kernel_size=3, dilation=1, dropout=dropout),
+            # ResidualConvBlock(d_model, kernel_size=3, dilation=2, dropout=dropout),
         )
 
         # Learnable CLS token
@@ -250,7 +270,10 @@ class EpochTransformerConv1D(nn.Module):
         # Classification head
         self.classifier = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Linear(d_model, num_classes)
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, num_classes),
         )
 
     def forward(self, x):
@@ -279,9 +302,11 @@ class EpochTransformerConv1D(nn.Module):
 
         # Apply Conv1D patch embedding: (batch, channels, seq_length) 
         #                             -> (batch, d_model, final_seq_length)
+        # print(f"before patch embedding: {x.shape}")
         x = self.patch_embedding(x)
-
+        # print(f"after patch embedding: {x.shape}")
         x = self.token_refine(x)
+        # print(f"after token refine: {x.shape}")
         
         # Transpose for transformer: (batch, final_seq_length, d_model)
         x = x.transpose(1, 2)

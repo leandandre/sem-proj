@@ -37,12 +37,12 @@ def load_best_metrics(experiment_name: str):
 
 def main():
     # Grid of hyperparameters to test
-    D_MODELS = [32, 64, 128]
-    MAX_TOKENS_LIST = [512, 256]  # Changed from [1024, 512]
+    D_MODELS = [64, 96, 128]             # embedding dims
+    NUM_LAYERS_LIST = [4, 6]             # transformer depth
+    MAX_TOKENS_LIST = [512, 256]         # token counts
     PREPROC_LIST = [
         "notch_bandpass_resample_znorm",
         "notch_bandpass_resample",
-        "notch_bandpass",
     ]
 
     # Fixed training settings
@@ -51,22 +51,20 @@ def main():
     LEARNING_RATE = 1e-3
     USE_CACHE = True
     CLASS_WEIGHTED_LOSS = False
-    USE_CONV1D = True  # Changed to True for Conv1D model
+    USE_CONV1D = True
 
     # Fixed transformer architecture
     NHEAD = 8
-    NUM_LAYERS = 4
     DROPOUT = 0.2
     NUM_CLASSES = 5
 
     results = []
     start_all = time.time()
 
-    total_runs = len(PREPROC_LIST) * len(MAX_TOKENS_LIST) * len(D_MODELS)
+    total_runs = len(PREPROC_LIST) * len(MAX_TOKENS_LIST) * len(D_MODELS) * len(NUM_LAYERS_LIST)
     current_run = 0
 
     for preproc_name in PREPROC_LIST:
-        # Load preprocessing config
         cfg_path = PROJECT_ROOT / "configs" / "preprocess" / f"{preproc_name}.yaml"
         if not cfg_path.exists():
             print(f"Skipping: missing preprocessing config: {cfg_path}")
@@ -75,124 +73,115 @@ def main():
 
         for max_tokens in MAX_TOKENS_LIST:
             for d_model in D_MODELS:
-                current_run += 1
-                
                 if d_model % NHEAD != 0:
                     print(f"Skipping d_model={d_model} (not divisible by nhead={NHEAD})")
                     continue
 
-                dim_feedforward = 4 * d_model
-                model_type = "conv1d" if USE_CONV1D else "meanpool"
-                experiment_name = (
-                    f"ablate_{model_type}_{preproc_name}_"
-                    f"d{d_model}_tok{max_tokens}_h{NHEAD}_L{NUM_LAYERS}"
-                )
-
-                print("\n" + "=" * 80)
-                print(f"RUN {current_run}/{total_runs}: {experiment_name}")
-                print("=" * 80)
-
-                model_cfg = {
-                    "input_channels": 2,
-                    "d_model": d_model,
-                    "nhead": NHEAD,
-                    "num_layers": NUM_LAYERS,
-                    "dim_feedforward": dim_feedforward,
-                    "dropout": DROPOUT,
-                    "num_classes": NUM_CLASSES,
-                    "max_tokens": max_tokens,
-                }
-
-                run_start = time.time()
-                try:
-                    _ = train_epochtransformer(
-                        num_epochs=NUM_EPOCHS,
-                        batch_size=BATCH_SIZE,
-                        lr=LEARNING_RATE,
-                        experiment_name=experiment_name,
-                        model_kwargs=model_cfg,
-                        preprocess_config=preproc_cfg,
-                        use_cache=USE_CACHE,
-                        class_weighted_loss=CLASS_WEIGHTED_LOSS,
-                        use_conv1d=USE_CONV1D,
+                for num_layers in NUM_LAYERS_LIST:
+                    current_run += 1
+                    dim_feedforward = 4 * d_model
+                    model_type = "conv1d" if USE_CONV1D else "meanpool"
+                    experiment_name = (
+                        f"ablate_{model_type}_{preproc_name}_"
+                        f"d{d_model}_tok{max_tokens}_h{NHEAD}_L{num_layers}"
                     )
-                except Exception as e:
-                    print(f"ERROR in run {experiment_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    
-                    results.append({
-                        "experiment": experiment_name,
-                        "preprocessing": preproc_name,
-                        "d_model": d_model,
-                        "dim_feedforward": dim_feedforward,
-                        "max_tokens": max_tokens,
-                        "nhead": NHEAD,
-                        "num_layers": NUM_LAYERS,
-                        "dropout": DROPOUT,
-                        "class_weighted_loss": CLASS_WEIGHTED_LOSS,
-                        "use_conv1d": USE_CONV1D,
-                        "batch_size": BATCH_SIZE,
-                        "learning_rate": LEARNING_RATE,
-                        "status": "failed",
-                        "error": str(e),
-                        "duration_min": round((time.time() - run_start) / 60, 2),
-                    })
-                    continue
 
-                # Load metrics from best checkpoint
-                metrics = load_best_metrics(experiment_name)
-                duration_min = round((time.time() - run_start) / 60, 2)
+                    print("\n" + "=" * 80)
+                    print(f"RUN {current_run}/{total_runs}: {experiment_name}")
+                    print("=" * 80)
 
-                if metrics is None:
-                    print(f"WARNING: No best_model.pt for {experiment_name}")
-                    results.append({
-                        "experiment": experiment_name,
-                        "preprocessing": preproc_name,
+                    model_cfg = {
+                        "input_channels": 2,
                         "d_model": d_model,
-                        "dim_feedforward": dim_feedforward,
-                        "max_tokens": max_tokens,
                         "nhead": NHEAD,
-                        "num_layers": NUM_LAYERS,
+                        "num_layers": num_layers,
+                        "dim_feedforward": dim_feedforward,
                         "dropout": DROPOUT,
-                        "class_weighted_loss": CLASS_WEIGHTED_LOSS,
-                        "use_conv1d": USE_CONV1D,
-                        "batch_size": BATCH_SIZE,
-                        "learning_rate": LEARNING_RATE,
-                        "status": "no_checkpoint",
-                        "duration_min": duration_min,
-                    })
-                else:
-                    training_cfg = metrics.get('training_config', {})
-                    
-                    print(f"✓ Completed {experiment_name}")
-                    print(f"  Val Macro F1: {metrics['val_macro_f1']:.4f}")
-                    print(f"  Val Accuracy: {metrics['val_accuracy']:.4f}")
-                    print(f"  Best epoch:   {metrics['epoch'] + 1 if metrics['epoch'] is not None else 'NA'}")
-                    print(f"  Duration:     {duration_min:.1f} min")
+                        "num_classes": NUM_CLASSES,
+                        "max_tokens": max_tokens,
+                    }
 
-                    results.append({
-                        "experiment": experiment_name,
-                        "preprocessing": preproc_name,
-                        "d_model": d_model,
-                        "dim_feedforward": dim_feedforward,
-                        "max_tokens": max_tokens,
-                        "nhead": NHEAD,
-                        "num_layers": NUM_LAYERS,
-                        "dropout": DROPOUT,
-                        "class_weighted_loss": CLASS_WEIGHTED_LOSS,
-                        "use_conv1d": USE_CONV1D,
-                        "batch_size": BATCH_SIZE,
-                        "learning_rate": LEARNING_RATE,
-                        "num_trainable_params": training_cfg.get('num_trainable_params', None),
-                        "status": "ok",
-                        "val_loss": round(float(metrics["val_loss"]), 6) if metrics["val_loss"] is not None else None,
-                        "val_accuracy": round(float(metrics["val_accuracy"]), 6) if metrics["val_accuracy"] is not None else None,
-                        "val_macro_f1": round(float(metrics["val_macro_f1"]), 6) if metrics["val_macro_f1"] is not None else None,
-                        "val_per_class_f1": [round(float(x), 6) for x in (metrics["val_per_class_f1"] or [])],
-                        "best_epoch": int(metrics["epoch"]) + 1 if metrics["epoch"] is not None else None,
-                        "duration_min": duration_min,
-                    })
+                    run_start = time.time()
+                    try:
+                        _ = train_epochtransformer(
+                            num_epochs=NUM_EPOCHS,
+                            batch_size=BATCH_SIZE,
+                            lr=LEARNING_RATE,
+                            experiment_name=experiment_name,
+                            model_kwargs=model_cfg,
+                            preprocess_config=preproc_cfg,
+                            use_cache=USE_CACHE,
+                            class_weighted_loss=CLASS_WEIGHTED_LOSS,
+                            use_conv1d=USE_CONV1D,
+                        )
+                    except Exception as e:
+                        print(f"ERROR in run {experiment_name}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        results.append({
+                            "experiment": experiment_name,
+                            "preprocessing": preproc_name,
+                            "d_model": d_model,
+                            "dim_feedforward": dim_feedforward,
+                            "max_tokens": max_tokens,
+                            "nhead": NHEAD,
+                            "num_layers": num_layers,
+                            "dropout": DROPOUT,
+                            "class_weighted_loss": CLASS_WEIGHTED_LOSS,
+                            "use_conv1d": USE_CONV1D,
+                            "batch_size": BATCH_SIZE,
+                            "learning_rate": LEARNING_RATE,
+                            "status": "failed",
+                            "error": str(e),
+                            "duration_min": round((time.time() - run_start) / 60, 2),
+                        })
+                        continue
+
+                    metrics = load_best_metrics(experiment_name)
+                    duration_min = round((time.time() - run_start) / 60, 2)
+
+                    if metrics is None:
+                        print(f"WARNING: No best_model.pt for {experiment_name}")
+                        results.append({
+                            "experiment": experiment_name,
+                            "preprocessing": preproc_name,
+                            "d_model": d_model,
+                            "dim_feedforward": dim_feedforward,
+                            "max_tokens": max_tokens,
+                            "nhead": NHEAD,
+                            "num_layers": num_layers,
+                            "dropout": DROPOUT,
+                            "class_weighted_loss": CLASS_WEIGHTED_LOSS,
+                            "use_conv1d": USE_CONV1D,
+                            "batch_size": BATCH_SIZE,
+                            "learning_rate": LEARNING_RATE,
+                            "status": "no_checkpoint",
+                            "duration_min": duration_min,
+                        })
+                    else:
+                        training_cfg = metrics.get('training_config', {})
+                        results.append({
+                            "experiment": experiment_name,
+                            "preprocessing": preproc_name,
+                            "d_model": d_model,
+                            "dim_feedforward": dim_feedforward,
+                            "max_tokens": max_tokens,
+                            "nhead": NHEAD,
+                            "num_layers": num_layers,
+                            "dropout": DROPOUT,
+                            "class_weighted_loss": CLASS_WEIGHTED_LOSS,
+                            "use_conv1d": USE_CONV1D,
+                            "batch_size": BATCH_SIZE,
+                            "learning_rate": LEARNING_RATE,
+                            "num_trainable_params": training_cfg.get('num_trainable_params', None),
+                            "status": "ok",
+                            "val_loss": float(metrics["val_loss"]) if metrics["val_loss"] is not None else None,
+                            "val_accuracy": float(metrics["val_accuracy"]) if metrics["val_accuracy"] is not None else None,
+                            "val_macro_f1": float(metrics["val_macro_f1"]) if metrics["val_macro_f1"] is not None else None,
+                            "val_per_class_f1": metrics["val_per_class_f1"] or [],
+                            "best_epoch": int(metrics["epoch"]) + 1 if metrics["epoch"] is not None else None,
+                            "duration_min": duration_min,
+                        })
 
     total_min = round((time.time() - start_all) / 60, 2)
     total_hours = round(total_min / 60, 2)
@@ -215,7 +204,8 @@ def main():
     fieldnames = [
         "experiment", "status", "preprocessing", "use_conv1d",
         "d_model", "dim_feedforward", "nhead", "num_layers",
-        "dropout", "max_tokens", "batch_size", "learning_rate",
+        "dropout", "max_tokens", "patch_size", "final_seq_length",
+        "batch_size", "learning_rate",
         "class_weighted_loss", "num_trainable_params",
         "val_loss", "val_accuracy", "val_macro_f1",
         "best_epoch", "duration_min",

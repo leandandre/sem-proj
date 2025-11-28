@@ -38,12 +38,12 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     print("=" * 80)
     
     # Training progress
-    print(f"\n📊 TRAINING PROGRESS")
+    print(f"\n TRAINING PROGRESS")
     print("-" * 80)
     print(f"Stopped at epoch: {checkpoint['epoch'] + 1}")
     
     # Performance metrics
-    print(f"\n🎯 VALIDATION PERFORMANCE")
+    print(f"\n VALIDATION PERFORMANCE")
     print("-" * 80)
     print(f"Validation Loss:     {checkpoint['val_loss']:.4f}")
     print(f"Validation Accuracy: {checkpoint['val_accuracy']:.4f} ({checkpoint['val_accuracy']*100:.2f}%)")
@@ -53,7 +53,7 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     class_names = ['Wake', 'N1', 'N2', 'N3', 'REM']
     per_class_f1 = checkpoint['val_per_class_f1']
     
-    print(f"\n📈 PER-CLASS F1 SCORES")
+    print(f"\n PER-CLASS F1 SCORES")
     print("-" * 80)
     print(f"{'Class':<10} {'F1 Score':<12} {'Bar Chart'}")
     print("-" * 80)
@@ -64,13 +64,20 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
         print(f"{class_name:<10} {f1:.4f}       {bar}")
     
     # Model architecture
-    print(f"\n🧠 MODEL ARCHITECTURE")
+    print(f"\n MODEL ARCHITECTURE")
     print("-" * 80)
     hyperparams = checkpoint['hyperparameters']
-    print(f"Model type:          {checkpoint.get('training_config', {}).get('model_type', 'Unknown')}")
+    train_cfg = checkpoint.get('training_config', {})  # Get early for token info
+    
+    print(f"Model type:          {train_cfg.get('model_type', 'Unknown')}")
     print(f"Input channels:      {hyperparams['input_channels']}")
     print(f"Sequence length:     {hyperparams['seq_length']}")
-    print(f"Max tokens:          {hyperparams.get('max_tokens', 'N/A')}")
+    
+    # ADD THESE LINES:
+    print(f"Max tokens:          {train_cfg.get('max_tokens', hyperparams.get('max_tokens', 'N/A'))}")
+    print(f"Patch size:          {train_cfg.get('patch_size', 'N/A')}")
+    print(f"Final seq length:    {train_cfg.get('final_seq_length', 'N/A')} (tokens fed to transformer)")
+    
     print(f"Embedding dim:       {hyperparams['d_model']}")
     print(f"Attention heads:     {hyperparams['nhead']}")
     print(f"Transformer layers:  {hyperparams['num_layers']}")
@@ -80,9 +87,8 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     
     # Training configuration
     if 'training_config' in checkpoint:
-        print(f"\n⚙️  TRAINING CONFIGURATION")
+        print(f"\n TRAINING CONFIGURATION")
         print("-" * 80)
-        train_cfg = checkpoint['training_config']
         print(f"Batch size:          {train_cfg.get('batch_size', 'N/A')}")
         print(f"Learning rate:       {train_cfg.get('learning_rate', 'N/A')}")
         print(f"Optimizer:           {train_cfg.get('optimizer', 'N/A')}")
@@ -98,14 +104,14 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     
     # Class weights (if used)
     if checkpoint.get('class_weights') is not None:
-        print(f"\n⚖️  CLASS WEIGHTS")
+        print(f"\n  CLASS WEIGHTS")
         print("-" * 80)
         class_weights = checkpoint['class_weights']
         for class_name, weight in zip(class_names, class_weights):
             print(f"{class_name:<10} {weight:.4f}")
     
     # Preprocessing configuration
-    print(f"\n🔧 PREPROCESSING CONFIGURATION")
+    print(f"\n PREPROCESSING CONFIGURATION")
     print("-" * 80)
     preprocess = checkpoint['preprocessing']
     for key, value in preprocess.items():
@@ -189,20 +195,31 @@ def plot_confusion_style_summary(checkpoint: dict, experiment_name: str, save_pa
              verticalalignment='center', bbox=dict(boxstyle='round', 
              facecolor='wheat', alpha=0.5))
     
-    # 3. Model architecture (text box)
+    # 3. Model architecture (text box) - ADD TOKEN INFO
     ax3 = fig.add_subplot(gs[1, 1])
     ax3.axis('off')
     hp = checkpoint['hyperparameters']
+    train_cfg = checkpoint.get('training_config', {})
+    
+    max_tokens = train_cfg.get('max_tokens', hp.get('max_tokens', 'N/A'))
+    final_seq_len = train_cfg.get('final_seq_length', 'N/A')
+    patch_size = train_cfg.get('patch_size', 'N/A')
+    
     arch_text = f"""
     MODEL ARCHITECTURE
     ───────────────────────
+    Input Seq Length:    {hp['seq_length']}
+    Patch Size:          {patch_size}
+    Final Tokens:        {final_seq_len}
+    Max Tokens:          {max_tokens}
+    
     Embedding Dim:       {hp['d_model']}
     Attention Heads:     {hp['nhead']}
     Transformer Layers:  {hp['num_layers']}
     Feedforward Dim:     {hp['dim_feedforward']}
     Dropout:             {hp['dropout']}
     """
-    ax3.text(0.1, 0.5, arch_text, fontsize=12, family='monospace',
+    ax3.text(0.1, 0.5, arch_text, fontsize=11, family='monospace',
              verticalalignment='center', bbox=dict(boxstyle='round',
              facecolor='lightblue', alpha=0.5))
     

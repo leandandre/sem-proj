@@ -22,7 +22,6 @@ from .preprocessing import (
     get_expected_seq_length,
 )
 
-# ADD THIS IMPORT
 from .cache import load_from_cache, save_to_cache
 
 N_HB_CHANNELS = 2
@@ -44,7 +43,7 @@ class BoasDataset(Dataset):
         transform_psg=None,
         target_transform=None,
         preprocess_config: Optional[PreprocessingConfig] = None,
-        use_cache: bool = True,  # ADD THIS PARAMETER
+        use_cache: bool = True,
     ):
         super().__init__()
         if subjects is None:
@@ -324,7 +323,7 @@ class BoasSequenceDataset(Dataset):
         transform_psg=None,
         target_transform=None,
         add_channel_dim: bool = True,
-        preprocess_config: Optional[PreprocessingConfig] = None,  # NEW
+        preprocess_config: Optional[PreprocessingConfig] = None,
     ):
         """
         Parameters

@@ -272,6 +272,9 @@ def train_epochtransformer(
         'num_trainable_params': num_params,
         'train_samples': len(train_loader.dataset),
         'val_samples': len(val_loader.dataset),
+        'max_tokens': model.max_tokens,
+        'patch_size': model.patch_size,
+        'final_seq_length': model.final_seq_length
     }
 
     # Early stopping state
@@ -433,12 +436,12 @@ if __name__ == "__main__":
 
     USE_CONV1D = True  # Set to True to use Conv1D patch embedding
     
-    D_MODEL = 64  # Reduced model size for testing, change to 64 later
+    D_MODEL = 128  # Reduced model size for testing, change to 64 later
     N_HEAD = 8     # 4 or 8 heads
-    NUM_LAYERS = 4
+    NUM_LAYERS = 6
     DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
     DROPOUT = 0.2
-    MAX_TOKENS = 256   # SHOULD BE in {1024, 512, 256}!!!!!
+    MAX_TOKENS = 512   # SHOULD BE in {1024, 512, 256}!!!!!
     
     
     # Load preprocessing config
