@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 # import PyQt5
 import matplotlib
-matplotlib.use("Qt5Agg")
+matplotlib.use("Agg")  # for headless plotting in some scripts
 import mne
 from typing import Optional, Tuple
 from sem_proj.data.preprocessing import PreprocessingConfig
