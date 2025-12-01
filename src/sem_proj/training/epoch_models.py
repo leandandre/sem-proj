@@ -66,7 +66,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,      # evtl try with more workers later
+        num_workers=7,      # local: 2, cluster: 7
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,    # optional
@@ -76,7 +76,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,    # evtl try with more workers later
+        num_workers=7,    # local: 2, cluster: 7
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,    # optional
