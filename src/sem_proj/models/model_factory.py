@@ -2,6 +2,7 @@ import math
 from matplotlib.pylab import rint
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class EpochTransformer(nn.Module):
