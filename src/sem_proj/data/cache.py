@@ -94,30 +94,12 @@ def save_to_cache(
     bounds: np.ndarray,
     labels: np.ndarray,
     valid_mask: np.ndarray,
-    norm_mean: np.ndarray,
-    norm_std: np.ndarray,
+    valid_hb_mask: Optional[np.ndarray] = None,  
+    norm_mean: Optional[np.ndarray] = None,
+    norm_std: Optional[np.ndarray] = None,
 ):
     """
     Save preprocessed subject to cache.
-    
-    Parameters
-    ----------
-    raw_data : np.ndarray
-        Preprocessed signal data (channels × samples)
-    sfreq : float
-        Sampling frequency after preprocessing
-    ch_names : list[str]
-        Channel names
-    bounds : np.ndarray
-        Epoch sample bounds (N_epochs × 2)
-    labels : np.ndarray
-        Sleep stage labels (N_epochs,)
-    valid_mask : np.ndarray
-        Boolean mask of valid epochs (N_epochs,)
-    norm_mean : np.ndarray
-        Normalization mean (for selected channels)
-    norm_std : np.ndarray
-        Normalization std (for selected channels)
     """
     cache_file = get_cache_path(subject, config, mode)
     
@@ -128,8 +110,9 @@ def save_to_cache(
         'bounds': bounds,
         'labels': labels,
         'valid_mask': valid_mask,
-        'norm_mean': norm_mean,  # may be None for epoch-wise
-        'norm_std': norm_std,    # may be None for epoch-wise
+        'valid_hb_mask': valid_hb_mask,
+        'norm_mean': norm_mean,
+        'norm_std': norm_std,
         'config_hash': get_cache_key(subject, config, mode),
     }
     

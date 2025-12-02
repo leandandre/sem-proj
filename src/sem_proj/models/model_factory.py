@@ -328,3 +328,248 @@ class EpochTransformerConv1D(nn.Module):
         # Classify
         logits = self.classifier(cls_output)  # (batch, num_classes)
         return logits
+
+class EpochTransformerConv1D_v2(nn.Module):
+    def __init__(
+        self,
+        input_channels=2,
+        seq_length=7680,
+        d_model=64,
+        nhead=8,
+        num_layers=4,
+        dim_feedforward=256,
+        dropout=0.1,
+        num_classes=5,
+        target_tokens: int = 480
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.original_seq_length = seq_length
+        self.target_tokens = target_tokens
+        assert target_tokens in {480, 240}, "target_tokens must be 480 or 240"
+        if target_tokens == 480:
+            self.tokenization = nn.Sequential(
+                nn.Conv1d(in_channels=input_channels,
+                        out_channels=32,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(32),
+                nn.GELU(),
+                nn.Conv1d(in_channels=32,
+                        out_channels=64,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Conv1d(in_channels=64,
+                        out_channels=128,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Conv1d(in_channels=128,
+                        out_channels=d_model,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0),
+            )
+        else:  # target_tokens == 240
+            self.tokenization = nn.Sequential(
+                nn.Conv1d(in_channels=input_channels,
+                        out_channels=32,
+                        kernel_size=5,
+                        stride=4,       # only change (faster reduction)
+                        padding=2),
+                nn.BatchNorm1d(32),
+                nn.GELU(),
+                nn.Conv1d(in_channels=32,
+                        out_channels=64,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Conv1d(in_channels=64,
+                        out_channels=128,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Conv1d(in_channels=128,
+                        out_channels=d_model,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0),
+            )
+        self.pos_embedding = nn.Parameter(torch.randn(1, target_tokens, d_model))   # no CLS for now
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True  # Important: expects (batch, seq, feature)
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, num_classes),
+        )
+
+    
+    def forward(self, x):
+        x = self.tokenization(x)  # (batch, d_model, target_tokens)
+        x = x.transpose(1, 2)   # (batch, target_tokens, d_model)
+        x = x + self.pos_embedding
+        x = self.transformer_encoder(x)  # (batch, target_tokens, d_model)
+        mean = x.mean(dim=1)  # mean pooling over tokens, no CLS for now
+        logits = self.classifier(mean)  # (batch, num_classes)
+        return logits
+
+    
+
+class SSLEpochTransformerConv1D(nn.Module):
+    """
+    Basically a copy from SL version, but without CLS token and classification head.
+    Outputs the full transformer output for SSL purposes.
+    """
+    def __init__(
+        self,
+        input_channels=2,      # N_HB_CHANNELS or N_PSG_CHANNELS from your dataset
+        seq_length=7680,       # Expected sequence length (e.g., 7680 for 256Hz*30s)
+        d_model=64,            # embedding dimension
+        nhead=8,               # number of attention heads
+        num_layers=4,          # number of transformer layers
+        dim_feedforward=256,   # MLP hidden dimension
+        dropout=0.1,
+        num_classes=5,         # will be ignored in SSL 
+        max_tokens: int = 512  # SHOULD BE in {1024, 512, 256}!
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.original_seq_length = seq_length
+        self.max_tokens = max_tokens
+
+        # Compute patch size to get ≤ max_tokens tokens
+        self.patch_size = math.ceil(seq_length / self.max_tokens)
+        self.final_seq_length = seq_length // self.patch_size
+
+        # Assert exact division (no truncation needed)
+        assert seq_length % self.patch_size == 0, (
+            f"Sequence length {seq_length} not divisible by patch size {self.patch_size}. "
+            f"This will cause information loss. Adjust preprocessing to ensure divisibility."
+        )
+        # Print info for transparency
+        print(f"\nPatch reduction in model (Conv1D):")
+        print(f"  Original sequence length: {self.original_seq_length}")
+        print(f"  Patch size (conv kernel): {self.patch_size}")
+        print(f"  Final sequence length (tokens): {self.final_seq_length}")
+        print(f"  Reduction factor: {self.patch_size}x\n")
+
+        # 1D Convolution for patch embedding
+        # Input: (batch, input_channels, seq_length)
+        # Output: (batch, d_model, final_seq_length)
+        self.patch_embedding = nn.Conv1d(
+            in_channels=input_channels,
+            out_channels=d_model,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,  # Non-overlapping patches
+            padding=0,
+            bias=True
+        )
+        # Optional: additional Conv1D layer(s) to refine token representations
+        self.token_refine = nn.Sequential(
+            ResidualConvBlock(d_model, kernel_size=3, dilation=1, dropout=dropout),
+            ResidualConvBlock(d_model, kernel_size=3, dilation=1, dropout=dropout),
+            # ResidualConvBlock(d_model, kernel_size=3, dilation=2, dropout=dropout),
+        )
+        # Positional encoding for final_seq_length (no CLS token)
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.final_seq_length, d_model))
+        # PyTorch's TransformerEncoder 
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True  # Important: expects (batch, seq, feature)
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+
+    def forward(self, x):
+        # x: (batch, channels, original_seq_length)
+        batch_size = x.size(0)
+        # Validate input length
+        if x.size(2) != self.original_seq_length:
+            raise ValueError(
+                f"Input time dimension {x.size(2)} doesn't match expected "
+                f"original_seq_length {self.original_seq_length}"
+            )
+
+        # Apply Conv1D patch embedding: (batch, channels, seq_length) 
+        #                             -> (batch, d_model, final_seq_length)
+        # print(f"before patch embedding: {x.shape}")
+        x = self.patch_embedding(x)
+        # print(f"after patch embedding: {x.shape}")
+        x = self.token_refine(x)
+        # print(f"after token refine: {x.shape}")
+        
+        # Transpose for transformer: (batch, final_seq_length, d_model)
+        x = x.transpose(1, 2)
+       
+        # Add positional encoding
+        x = x + self.pos_embedding
+        
+        # Transformer encoder
+        x = self.transformer_encoder(x)  # (batch, final_seq_length, d_model)
+
+        # return whole transformer output for SSL purposes
+        return x
+
+class SSLClassifierHead(nn.Module):
+    """
+    Simple classification head for SSL transformer outputs for fine-tuning.
+    """
+    def __init__(
+        self,
+        d_model=64,            # embedding dimension from the transformer
+        dropout=0.1,
+        num_classes=5,         # Wake, N1, N2, N3, REM
+    ):
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model, num_classes),
+        )
+
+    def forward(self, x):
+        """
+        Forward pass for classification head.
+        
+        Parameters
+        ----------
+        x : torch.Tensor, shape (batch, d_model)
+            Mean of transformer output.
+        
+        Returns
+        -------
+        torch.Tensor, shape (batch, num_classes)
+            Class logits based on the mean of transformer outputs.
+        """
+        logits = self.classifier(x)  # (batch, num_classes)
+        return logits

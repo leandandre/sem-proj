@@ -15,7 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sem_proj.models.model_factory import EpochTransformer
 
-CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+# CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints_leomed"
 
 
 def load_checkpoint(experiment_name: str, checkpoint_name: str = "best_model.pt"):

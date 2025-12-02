@@ -12,7 +12,7 @@ random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.ma
 
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
-from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D
+from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
 
 # Project root = .../sem-proj
@@ -66,7 +66,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=7,      # local: 2, cluster: 7
+        num_workers=2,      # local: 2, cluster: 7
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,    # optional
@@ -76,7 +76,7 @@ def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[Preproces
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=7,    # local: 2, cluster: 7
+        num_workers=2,    # local: 2, cluster: 7
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,    # optional
@@ -222,7 +222,7 @@ def train_epochtransformer(
 
     # Choose model architecture
     if use_conv1d:
-        model = EpochTransformerConv1D(**default_model_cfg).to(device)
+        model = EpochTransformerConv1D_v2(**default_model_cfg).to(device)
         print("Using Conv1D patch embedding")
     else:
         model = EpochTransformer(**default_model_cfg).to(device)
@@ -263,7 +263,7 @@ def train_epochtransformer(
         'use_cache': use_cache,
         'class_weighted_loss': class_weighted_loss,
         'use_conv1d': use_conv1d,
-        'model_type': 'EpochTransformerConv1D' if use_conv1d else 'EpochTransformer',
+        'model_type': 'EpochTransformerConv1D_v2' if use_conv1d else 'EpochTransformer',
         'optimizer': 'Adam',
         'scheduler': 'ReduceLROnPlateau',
         'scheduler_patience': 6,
@@ -272,9 +272,9 @@ def train_epochtransformer(
         'num_trainable_params': num_params,
         'train_samples': len(train_loader.dataset),
         'val_samples': len(val_loader.dataset),
-        'max_tokens': model.max_tokens,
-        'patch_size': model.patch_size,
-        'final_seq_length': model.final_seq_length
+        'target_tokens': model.target_tokens,
+        # 'patch_size': model.patch_size,
+        # 'final_seq_length': model.final_seq_length
     }
 
     # Early stopping state
@@ -436,12 +436,12 @@ if __name__ == "__main__":
 
     USE_CONV1D = True  # Set to True to use Conv1D patch embedding
     
-    D_MODEL = 128  # Reduced model size for testing, change to 64 later
-    N_HEAD = 8     # 4 or 8 heads
-    NUM_LAYERS = 6
+    D_MODEL = 32  # Reduced model size for testing, change to 64 later
+    N_HEAD = 4     # 4 or 8 heads
+    NUM_LAYERS = 4
     DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
     DROPOUT = 0.2
-    MAX_TOKENS = 512   # SHOULD BE in {1024, 512, 256}!!!!!
+    TARGET_TOKENS = 480   # SHOULD BE in {240, 480}
     
     
     # Load preprocessing config
@@ -460,12 +460,12 @@ if __name__ == "__main__":
         'dim_feedforward': DIM_FEEDFORWARD,
         'dropout': DROPOUT,
         'num_classes': 5,       # fixed for 5 sleep stages
-        'max_tokens': MAX_TOKENS
+        'target_tokens': TARGET_TOKENS
     }
     
     # Generate experiment name based on config
-    VERSION = 1     # CHANGE for each new run
-    model_type = "conv1d" if USE_CONV1D else "meanpool"
+    VERSION = 2     # CHANGE for each new run
+    model_type = "conv1d_v2" if USE_CONV1D else "meanpool"
     experiment_name = f"epochtransformer_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with {'Conv1D' if USE_CONV1D else 'MeanPooling'} model")

@@ -39,10 +39,10 @@ def main():
     # Grid of hyperparameters to test
     D_MODELS = [64, 96, 128]             # embedding dims
     NUM_LAYERS_LIST = [4, 6]             # transformer depth
-    MAX_TOKENS_LIST = [512, 256]         # token counts
+    TARGET_TOKENS_LIST = [240, 480]         # token counts
     PREPROC_LIST = [
         "notch_bandpass_resample_znorm",
-        "notch_bandpass_resample",
+        # "notch_bandpass_resample",
     ]
 
     # Fixed training settings
@@ -61,7 +61,7 @@ def main():
     results = []
     start_all = time.time()
 
-    total_runs = len(PREPROC_LIST) * len(MAX_TOKENS_LIST) * len(D_MODELS) * len(NUM_LAYERS_LIST)
+    total_runs = len(PREPROC_LIST) * len(TARGET_TOKENS_LIST) * len(D_MODELS) * len(NUM_LAYERS_LIST)
     current_run = 0
 
     for preproc_name in PREPROC_LIST:
@@ -71,7 +71,7 @@ def main():
             continue
         preproc_cfg = PreprocessingConfig.from_yaml(cfg_path)
 
-        for max_tokens in MAX_TOKENS_LIST:
+        for target_tokens in TARGET_TOKENS_LIST:
             for d_model in D_MODELS:
                 if d_model % NHEAD != 0:
                     print(f"Skipping d_model={d_model} (not divisible by nhead={NHEAD})")
@@ -80,10 +80,10 @@ def main():
                 for num_layers in NUM_LAYERS_LIST:
                     current_run += 1
                     dim_feedforward = 4 * d_model
-                    model_type = "conv1d" if USE_CONV1D else "meanpool"
+                    model_type = "conv1d_v2" if USE_CONV1D else "meanpool"
                     experiment_name = (
                         f"ablate_{model_type}_{preproc_name}_"
-                        f"d{d_model}_tok{max_tokens}_h{NHEAD}_L{num_layers}"
+                        f"d{d_model}_tok{target_tokens}_h{NHEAD}_L{num_layers}"
                     )
 
                     print("\n" + "=" * 80)
@@ -98,7 +98,7 @@ def main():
                         "dim_feedforward": dim_feedforward,
                         "dropout": DROPOUT,
                         "num_classes": NUM_CLASSES,
-                        "max_tokens": max_tokens,
+                        "target_tokens": target_tokens,
                     }
 
                     run_start = time.time()
@@ -123,7 +123,7 @@ def main():
                             "preprocessing": preproc_name,
                             "d_model": d_model,
                             "dim_feedforward": dim_feedforward,
-                            "max_tokens": max_tokens,
+                            "target_tokens": target_tokens,
                             "nhead": NHEAD,
                             "num_layers": num_layers,
                             "dropout": DROPOUT,
@@ -147,7 +147,7 @@ def main():
                             "preprocessing": preproc_name,
                             "d_model": d_model,
                             "dim_feedforward": dim_feedforward,
-                            "max_tokens": max_tokens,
+                            "target_tokens": target_tokens,
                             "nhead": NHEAD,
                             "num_layers": num_layers,
                             "dropout": DROPOUT,
@@ -165,7 +165,7 @@ def main():
                             "preprocessing": preproc_name,
                             "d_model": d_model,
                             "dim_feedforward": dim_feedforward,
-                            "max_tokens": max_tokens,
+                            "target_tokens": target_tokens,
                             "nhead": NHEAD,
                             "num_layers": num_layers,
                             "dropout": DROPOUT,
@@ -204,7 +204,7 @@ def main():
     fieldnames = [
         "experiment", "status", "preprocessing", "use_conv1d",
         "d_model", "dim_feedforward", "nhead", "num_layers",
-        "dropout", "max_tokens", "patch_size", "final_seq_length",
+        "dropout", "target_tokens",
         "batch_size", "learning_rate",
         "class_weighted_loss", "num_trainable_params",
         "val_loss", "val_accuracy", "val_macro_f1",
@@ -228,7 +228,7 @@ def main():
         print(f"{i:>2}. {r['experiment']}")
         print(f"    Macro F1:  {r['val_macro_f1']:.4f}")
         print(f"    Accuracy:  {r['val_accuracy']:.4f}")
-        print(f"    d_model:   {r['d_model']}, max_tokens: {r['max_tokens']}")
+        print(f"    d_model:   {r['d_model']}, target_tokens: {r['target_tokens']}")
         print(f"    Preproc:   {r['preprocessing']}")
         print(f"    Duration:  {r['duration_min']:.1f} min\n")
 

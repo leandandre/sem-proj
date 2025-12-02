@@ -88,54 +88,85 @@ class BoasDataset(Dataset):
             
             # TRY TO LOAD FROM CACHE FIRST
             if self.use_cache:
-                cache_data_hb = None
-                cache_data_psg = None
+                cache_success = False
                 
-                if self.mode in {"headband", "cross"}:
+                if self.mode == "headband":
+                    # Only need headband cache
                     cache_data_hb = load_from_cache(subj, self.preprocess_config, mode="headband")
-                
-                # ALWAYS try to load PSG cache (needed for labels/valid_mask)
-                cache_data_psg = load_from_cache(subj, self.preprocess_config, mode="psg")
-                
-                # Determine cache hit status
-                cache_hit_hb = cache_data_hb is not None if self.mode in {"headband", "cross"} else True
-                cache_hit_psg = cache_data_psg is not None  # Always need PSG for labels
-                
-                if cache_hit_hb and cache_hit_psg:
-                    # Load headband data if needed
-                    if self.mode in {"headband", "cross"}:
+                    
+                    if cache_data_hb is not None:
+                        # Load all data from cache
                         self.raw_data_hb[subj] = cache_data_hb['raw_data']
                         self.sfreq_hb[subj] = cache_data_hb['sfreq']
                         self.bounds_hb[subj] = cache_data_hb['bounds']
                         self.norm_stats_hb[subj] = (cache_data_hb['norm_mean'], cache_data_hb['norm_std'])
-                        self.valid_hb_ai[subj] = cache_data_hb.get('valid_mask', np.ones(len(cache_data_hb['labels']), dtype=bool))
+                        self.labels_psg[subj] = cache_data_hb['labels']
+                        self.valid_psg[subj] = cache_data_hb['valid_mask']
+                        self.valid_hb_ai[subj] = cache_data_hb.get('valid_hb_mask', np.ones(len(cache_data_hb['labels']), dtype=bool))
+                        
+                        # Add to indices
+                        mask = self.valid_psg[subj] & self.valid_hb_ai[subj]
+                        epoch_indices = np.where(mask)[0]
+                        for ei in epoch_indices:
+                            self.indices.append((subj, int(ei)))
+                        
+                        cache_success = True
+                
+                elif self.mode == "psg":
+                    # Only need PSG cache
+                    cache_data_psg = load_from_cache(subj, self.preprocess_config, mode="psg")
                     
-                    # ALWAYS load PSG labels and valid mask
-                    self.labels_psg[subj] = cache_data_psg['labels']
-                    self.valid_psg[subj] = cache_data_psg['valid_mask']
-                    
-                    # Load PSG data if in PSG or cross mode
-                    if self.mode in {"psg", "cross"}:
+                    if cache_data_psg is not None:
                         self.raw_data_psg[subj] = cache_data_psg['raw_data']
                         self.sfreq_psg[subj] = cache_data_psg['sfreq']
                         self.bounds_psg[subj] = cache_data_psg['bounds']
                         self.norm_stats_psg[subj] = (cache_data_psg['norm_mean'], cache_data_psg['norm_std'])
-                    
-                    # Add to indices
-                    if self.mode == "headband":
-                        mask = self.valid_psg[subj] & self.valid_hb_ai[subj]
-                    elif self.mode == "psg":
+                        self.labels_psg[subj] = cache_data_psg['labels']
+                        self.valid_psg[subj] = cache_data_psg['valid_mask']
+                        
+                        # Add to indices
                         mask = self.valid_psg[subj]
-                    else:  # cross
+                        epoch_indices = np.where(mask)[0]
+                        for ei in epoch_indices:
+                            self.indices.append((subj, int(ei)))
+                        
+                        cache_success = True
+                
+                else:  # mode == "cross"
+                    # Need both caches
+                    cache_data_hb = load_from_cache(subj, self.preprocess_config, mode="headband")
+                    cache_data_psg = load_from_cache(subj, self.preprocess_config, mode="psg")
+                    
+                    if cache_data_hb is not None and cache_data_psg is not None:
+                        # Load headband
+                        self.raw_data_hb[subj] = cache_data_hb['raw_data']
+                        self.sfreq_hb[subj] = cache_data_hb['sfreq']
+                        self.bounds_hb[subj] = cache_data_hb['bounds']
+                        self.norm_stats_hb[subj] = (cache_data_hb['norm_mean'], cache_data_hb['norm_std'])
+                        self.valid_hb_ai[subj] = cache_data_hb.get('valid_hb_mask', np.ones(len(cache_data_hb['labels']), dtype=bool))
+                        
+                        # Load PSG
+                        self.raw_data_psg[subj] = cache_data_psg['raw_data']
+                        self.sfreq_psg[subj] = cache_data_psg['sfreq']
+                        self.bounds_psg[subj] = cache_data_psg['bounds']
+                        self.norm_stats_psg[subj] = (cache_data_psg['norm_mean'], cache_data_psg['norm_std'])
+                        self.labels_psg[subj] = cache_data_psg['labels']
+                        self.valid_psg[subj] = cache_data_psg['valid_mask']
+                        
+                        # Add to indices
                         mask = self.valid_psg[subj] & self.valid_hb_ai[subj]
-                    
-                    epoch_indices = np.where(mask)[0]
-                    for ei in epoch_indices:
-                        self.indices.append((subj, int(ei)))
-                    
+                        epoch_indices = np.where(mask)[0]
+                        for ei in epoch_indices:
+                            self.indices.append((subj, int(ei)))
+                        
+                        cache_success = True
+                
+                if cache_success:
                     continue  # Skip to next subject
             
             # CACHE MISS - Process from scratch
+            print(f"  Cache miss, preprocessing {subj}...")
+            
             # --- Load and preprocess raw data ---
             if self.mode in {"headband", "cross"}:
                 raw_hb = load_headband_raw(subj, preprocess_config=None)
@@ -173,14 +204,13 @@ class BoasDataset(Dataset):
                 raw_hb_selected.pick(raw_hb_selected.ch_names[:N_HB_CHANNELS])
                 
                 valid_for_norm_hb = self.valid_psg[subj] & self.valid_hb_ai[subj]
-                # Only compute night stats if flag enabled
                 mean_hb, std_hb = compute_subject_normalization_stats(
                     raw_hb_selected,
                     valid_for_norm_hb,
                     self.bounds_hb[subj],
                     self.preprocess_config,
                 )
-                self.norm_stats_hb[subj] = (mean_hb, std_hb)  # may be (None, None)
+                self.norm_stats_hb[subj] = (mean_hb, std_hb)
                 
                 self.raw_data_hb[subj] = raw_hb_selected.get_data()
                 self.sfreq_hb[subj] = raw_hb_selected.info['sfreq']
@@ -195,9 +225,10 @@ class BoasDataset(Dataset):
                         ch_names=raw_hb_selected.ch_names,
                         bounds=self.bounds_hb[subj],
                         labels=labels_psg,
-                        valid_mask=valid_for_norm_hb,
-                        norm_mean=mean_hb,   # None if epoch-wise
-                        norm_std=std_hb,     # None if epoch-wise
+                        valid_mask=self.valid_psg[subj],
+                        valid_hb_mask=valid_for_norm_hb,  
+                        norm_mean=mean_hb,
+                        norm_std=std_hb,
                     )
 
             if self.mode in {"psg", "cross"}:
@@ -227,6 +258,7 @@ class BoasDataset(Dataset):
                         bounds=self.bounds_psg[subj],
                         labels=labels_psg,
                         valid_mask=valid_for_norm_psg,
+                        valid_hb_mask=None,  # Not needed for PSG
                         norm_mean=mean_psg,
                         norm_std=std_psg,
                     )
