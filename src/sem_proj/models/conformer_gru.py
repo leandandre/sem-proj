@@ -91,3 +91,4 @@ class ConformerGRUClassifier(nn.Module):
         gru_out, h_new = self.gru(z.unsqueeze(1), h_gru)
         logits = self.classifier(gru_out[:, -1, :])  # (B, num_classes)
         return logits, h_new
+    

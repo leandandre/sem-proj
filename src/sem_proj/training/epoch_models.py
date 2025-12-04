@@ -14,6 +14,7 @@ from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
+from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, Compose
 
 # Project root = .../sem-proj
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -44,22 +45,36 @@ def compute_class_weights(dataloader, num_classes=5):
 
 
 
-def make_dataloaders(batch_size: int = 16, preprocess_config: Optional[PreprocessingConfig] = None, use_cache: bool = True):
+def make_dataloaders(batch_size: int = 16,
+                     preprocess_config: Optional[PreprocessingConfig] = None,
+                     use_cache: bool = True,
+                     use_augmentation: bool = True
+):
     # Load fixed splits
     tr_subs = get_train_subjects()
     val_subs = get_val_subjects()
+
+    # Define augmentation transforms (only for training)
+    train_transform = None
+    if use_augmentation:
+        train_transform = Compose([
+            RandomTimeShift(max_shift_ratio=0.1),      # +-10% time shift
+            RandomAmplitudeScale(scale_range=(0.9, 1.1))  # +-10% amplitude
+        ])
 
     train_ds = BoasDataset(
         subjects=tr_subs, 
         mode="headband",
         preprocess_config=preprocess_config,
-        use_cache=use_cache
+        use_cache=use_cache,
+        transform_hb=train_transform    # augment training samples
     )
     val_ds = BoasDataset(
         subjects=val_subs, 
         mode="headband",
         preprocess_config=preprocess_config,
-        use_cache=use_cache
+        use_cache=use_cache,
+        transform_hb=None   # no augmentation for validation
     )
 
     train_loader = DataLoader(
@@ -155,6 +170,7 @@ def train_epochtransformer(
     use_cache: bool = True,
     class_weighted_loss: bool = False,
     use_conv1d: bool = False,
+    use_augmentation: bool = True
 ):
     """
     Train EpochTransformer model.
@@ -235,7 +251,8 @@ def train_epochtransformer(
     train_loader, val_loader = make_dataloaders(
         batch_size=batch_size, 
         preprocess_config=preprocess_config,
-        use_cache=use_cache
+        use_cache=use_cache,
+        use_augmentation=use_augmentation
     )
     print(f"Training samples: {len(train_loader.dataset)}")
     print(f"Validation samples: {len(val_loader.dataset)}\n")
@@ -247,8 +264,10 @@ def train_epochtransformer(
         class_weights = compute_class_weights(train_loader, num_classes=5).to(device)
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
-    else:
-        criterion = nn.CrossEntropyLoss()
+    else: # manual weights or unweighted
+        manual_weights = torch.tensor([0.76, 1.53, 0.42, 1.53, 0.76], dtype=torch.float32, device=device)
+        manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
+        criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -307,8 +326,7 @@ def train_epochtransformer(
             loss = criterion(logits, y)
             
             loss.backward()
-            if class_weighted_loss:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             batch_loss = loss.item()
@@ -430,18 +448,18 @@ if __name__ == "__main__":
     NUM_EPOCHS = 120
     BATCH_SIZE = 128     # look at GPU memory and choose in {32, 64, 128, 256}
     LEARNING_RATE = 1e-3
-    USE_CACHE = True  # Set to False to disable caching
+    USE_CACHE = True    # Set to False to disable caching
 
     WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
-
     USE_CONV1D = True  # Set to True to use Conv1D patch embedding
+    USE_AUGMENTATION = True  # Set to True to use data augmentation
     
-    D_MODEL = 32  # Reduced model size for testing, change to 64 later
+    D_MODEL = 96  # Reduced model size for testing, change to 64 later
     N_HEAD = 4     # 4 or 8 heads
-    NUM_LAYERS = 4
+    NUM_LAYERS = 2
     DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
     DROPOUT = 0.2
-    TARGET_TOKENS = 480   # SHOULD BE in {240, 480}
+    TARGET_TOKENS = 240   # SHOULD BE in {240, 480}
     
     
     # Load preprocessing config
@@ -453,7 +471,7 @@ if __name__ == "__main__":
     
     # Model config (seq_length is automatically determined from preprocessing)
     model_cfg = {
-        'input_channels': 2,    # fixed for headband data
+        'input_channels': 2,   # fixed for headband data
         'd_model': D_MODEL,
         'nhead': N_HEAD,
         'num_layers': NUM_LAYERS,
@@ -465,10 +483,10 @@ if __name__ == "__main__":
     
     # Generate experiment name based on config
     VERSION = 2     # CHANGE for each new run
-    model_type = "conv1d_v2" if USE_CONV1D else "meanpool"
+    model_type = "conv1d_v2_augm" if USE_CONV1D else "meanpool"
     experiment_name = f"epochtransformer_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
-    print(f"\n Starting training with {'Conv1D' if USE_CONV1D else 'MeanPooling'} model")
+    print(f"\n Starting training with {model_type} model")
     print(f" Config file: {config_file}")
     
     model = train_epochtransformer(
@@ -481,4 +499,5 @@ if __name__ == "__main__":
         use_cache=USE_CACHE,
         class_weighted_loss=WEIGHTED_LOSS,
         use_conv1d=USE_CONV1D,
+        use_augmentation=USE_AUGMENTATION
     )

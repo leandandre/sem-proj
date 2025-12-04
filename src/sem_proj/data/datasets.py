@@ -201,8 +201,9 @@ class BoasDataset(Dataset):
             # --- Channel selection and normalization ---
             if self.mode in {"headband", "cross"}:
                 raw_hb_selected = raw_hb.copy()
-                raw_hb_selected.pick(raw_hb_selected.ch_names[:N_HB_CHANNELS])
-                
+                raw_hb_selected.pick(raw_hb_selected.ch_names[:N_HB_CHANNELS]) # COMMENTED OUT FOR QUICK SINGLE-CHANNEL TESTING
+                # raw_hb_selected.pick([raw_hb_selected.ch_names[1]])  # FOR QUICK TEST: Only second channel (index 1)
+
                 valid_for_norm_hb = self.valid_psg[subj] & self.valid_hb_ai[subj]
                 mean_hb, std_hb = compute_subject_normalization_stats(
                     raw_hb_selected,
@@ -332,7 +333,7 @@ class BoasDataset(Dataset):
         return x_hb, x_psg, y
     
 
-### not in usage yet, probably needs an update to match new BoasDataset above (25_11_25) ###
+### updated 03-12-25 ###
 class BoasSequenceDataset(Dataset):
     """
     Sequence-level BOAS dataset that wraps BoasDataset.
@@ -354,8 +355,9 @@ class BoasSequenceDataset(Dataset):
         transform_hb=None,
         transform_psg=None,
         target_transform=None,
-        add_channel_dim: bool = True,
+        add_channel_dim: bool = False,
         preprocess_config: Optional[PreprocessingConfig] = None,
+        use_cache: bool = True,  
     ):
         """
         Parameters
@@ -372,17 +374,22 @@ class BoasSequenceDataset(Dataset):
             Transforms passed to underlying BoasDataset.
         add_channel_dim : bool
             If True, add singleton channel dimension: (seq_len, C, T) -> (seq_len, 1, C, T)
+        preprocess_config : PreprocessingConfig, optional
+            Preprocessing configuration passed to BoasDataset.
+        use_cache : bool
+            Whether to use cached preprocessed data (passed to BoasDataset).
         """
         super().__init__()
         
-        # Create underlying epoch-level dataset
+        # Create underlying epoch-level dataset (now with caching support)
         self.epoch_dataset = BoasDataset(
             subjects=subjects,
             mode=mode,
             transform_hb=transform_hb,
             transform_psg=transform_psg,
             target_transform=target_transform,
-            preprocess_config=preprocess_config,  # PASS THROUGH
+            preprocess_config=preprocess_config,
+            use_cache=use_cache,  
         )
         
         self.mode = mode
@@ -390,7 +397,7 @@ class BoasSequenceDataset(Dataset):
         self.stride = stride
         self.add_channel_dim = add_channel_dim
 
-        # FAST lookup from (subj, epoch_idx) -> dataset index fast
+        # Fast lookup from (subj, epoch_idx) -> dataset index
         self.idx_map = {
             key: i for i, key in enumerate(self.epoch_dataset.indices)
         }
@@ -404,6 +411,11 @@ class BoasSequenceDataset(Dataset):
         Build list of valid sequence start positions.
         Each sequence is (subject, start_epoch_idx) where start_epoch_idx + seq_len
         stays within the same recording.
+        
+        NOTE: This respects the valid masks from BoasDataset:
+        - For headband mode: valid_psg & valid_hb_ai
+        - For psg mode: valid_psg
+        - For cross mode: valid_psg & valid_hb_ai
         """
         # Group epoch indices by subject
         subject_to_indices = {}
@@ -418,6 +430,7 @@ class BoasSequenceDataset(Dataset):
             epoch_indices = sorted(epoch_indices)
             
             # Find consecutive runs of epochs
+            # (epochs are consecutive if epoch_idx differs by 1)
             consecutive_runs = []
             if len(epoch_indices) == 0:
                 continue
@@ -428,7 +441,7 @@ class BoasSequenceDataset(Dataset):
                     # Continue current run
                     current_run.append(epoch_indices[i])
                 else:
-                    # Start new run
+                    # Gap detected - start new run
                     consecutive_runs.append(current_run)
                     current_run = [epoch_indices[i]]
             consecutive_runs.append(current_run)
@@ -462,8 +475,7 @@ class BoasSequenceDataset(Dataset):
             
             if self.mode == "cross":
                 x_hb, x_psg, y = self.epoch_dataset[dataset_idx]
-                # For cross mode, return both modalities
-                # Stack them or handle as needed
+                # For cross mode, collect both modalities
                 x_list.append((x_hb, x_psg))
             else:
                 x, y = self.epoch_dataset[dataset_idx]

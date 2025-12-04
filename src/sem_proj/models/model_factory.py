@@ -427,16 +427,181 @@ class EpochTransformerConv1D_v2(nn.Module):
         )
 
     
-    def forward(self, x):
+    def forward(self, x, return_mean_embedding=False):
         x = self.tokenization(x)  # (batch, d_model, target_tokens)
         x = x.transpose(1, 2)   # (batch, target_tokens, d_model)
         x = x + self.pos_embedding
         x = self.transformer_encoder(x)  # (batch, target_tokens, d_model)
         mean = x.mean(dim=1)  # mean pooling over tokens, no CLS for now
+        if return_mean_embedding:
+            return mean  # (batch, d_model), model can now be used for inter-epoch sequence modeling
         logits = self.classifier(mean)  # (batch, num_classes)
         return logits
+    
+
+### feeding several epoch embeddings into a sequence model (here, GRU) ###
+class SequenceGRUClassifier(nn.Module):
+    def __init__(self, epoch_model, hidden_size=128, num_layers=1, num_classes=5):
+        super().__init__()
+        self.epoch_model = epoch_model          # EpochTransformerConv1d_v2
+        self.input_dim = epoch_model.d_model    # d_model (e.g. 64)
+        
+        self.gru = nn.GRU(
+            input_size=self.input_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,      # input (B, L, D)
+            dropout=0.2,
+            bidirectional=False     # try bidir --> change classifier input size (*2)
+        )
+        self.classifier = nn.Linear(hidden_size, num_classes)   # evlt increase depth?
+
+    def forward(self, x):
+        """
+        x: (B, L, C, T)
+        returns: logits (B, L, num_classes)
+        """
+        B, L, C, T = x.shape
+
+        # 1) Flatten epochs within batch
+        x_flat = x.view(B * L, C, T)                  # (B*L, C, T)
+
+        # 2) Encode each epoch -> embedding
+        emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)  # (B*L, d_model)
+
+        # 3) Reshape back to sequence form
+        emb_seq = emb_flat.view(B, L, -1)             # (B, L, d_model)
+
+        # 4) GRU over epochs
+        gru_out, _ = self.gru(emb_seq)                # (B, L, hidden_size)
+
+        # 5) Classification for each epoch (many-to-many)
+        logits = self.classifier(gru_out)             # (B, L, num_classes)
+        return logits
+
+
+class SequenceTransformerClassifier(nn.Module):
+    """
+    Sequence-level classifier using a small Transformer instead of GRU.
+    
+    Architecture:
+    1. Encode each epoch with EpochTransformerConv1D_v2 → (B*L, d_model)
+    2. Reshape to sequence form → (B, L, d_model)
+    3. Pass through Transformer encoder layers → (B, L, d_model)
+    4. Classify each epoch in the sequence → (B, L, num_classes)
+    
+    Advantages over GRU:
+    - Parallel computation (faster)
+    - Better long-range dependencies
+    - Attention weights interpretable
+    """
+    def __init__(
+        self,
+        epoch_model,
+        d_model_seq: int = 96,      # Embedding dimension for sequence transformer
+        nhead: int = 4,              # Number of attention heads
+        num_layers: int = 2,         # Number of transformer layers
+        dim_feedforward: int = 384,  # Feedforward dimension
+        dropout: float = 0.2,
+        num_classes: int = 5,
+    ):
+        """
+        Parameters
+        ----------
+        epoch_model : EpochTransformerConv1D_v2
+            Pre-trained or trainable epoch encoder.
+        d_model_seq : int
+            Embedding dimension for the sequence transformer.
+            Will project epoch embeddings to this dimension.
+        nhead : int
+            Number of attention heads in sequence transformer.
+        num_layers : int
+            Number of transformer encoder layers for sequence modeling.
+        dim_feedforward : int
+            Feedforward dimension in transformer layers.
+        dropout : float
+            Dropout rate.
+        num_classes : int
+            Number of output classes.
+        """
+        super().__init__()
+        self.epoch_model = epoch_model
+        self.input_dim = epoch_model.d_model  # d_model from epoch model (e.g., 64)
+        self.d_model_seq = d_model_seq
+        
+        # Project epoch embeddings to sequence transformer dimension
+        self.embedding_projection = nn.Linear(self.input_dim, d_model_seq)
+        
+        # Positional encoding for sequence transformer
+        # Max sequence length (assumption: won't exceed 100 epochs in a sequence)
+        max_seq_len = 100
+        self.pos_embedding = nn.Parameter(torch.randn(1, max_seq_len, d_model_seq))
+        
+        # Transformer encoder for sequence modeling
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model_seq,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True,
+            activation='gelu'
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+        
+        # Classification head for each epoch
+        self.classifier = nn.Linear(d_model_seq, num_classes)
+
+    def forward(self, x):
+        """
+        Forward pass for sequence classification.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences with shape (B, L, C, T) where:
+            - B: batch size
+            - L: sequence length (number of epochs)
+            - C: number of channels
+            - T: number of timepoints per epoch
+        
+        Returns
+        -------
+        torch.Tensor
+            Classification logits with shape (B, L, num_classes)
+        """
+        B, L, C, T = x.shape
+
+        # 1) Flatten epochs within batch
+        x_flat = x.view(B * L, C, T)  # (B*L, C, T)
+
+        # 2) Encode each epoch -> embedding
+        emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)  # (B*L, d_model)
+
+        # 3) Project to sequence transformer dimension
+        emb_proj = self.embedding_projection(emb_flat)  # (B*L, d_model_seq)
+
+        # 4) Reshape back to sequence form
+        emb_seq = emb_proj.view(B, L, -1)  # (B, L, d_model_seq)
+
+        # 5) Add positional encoding
+        emb_seq = emb_seq + self.pos_embedding[:, :L, :]  # (B, L, d_model_seq)
+
+        # 6) Transformer encoder over epochs
+        trans_out = self.transformer_encoder(emb_seq)  # (B, L, d_model_seq)
+
+        # 7) Classification for each epoch (many-to-many)
+        logits = self.classifier(trans_out)  # (B, L, num_classes)
+        return logits
+
+
 
     
+
+
+
 
 class SSLEpochTransformerConv1D(nn.Module):
     """
