@@ -255,6 +255,7 @@ def train_sequence_model(
     # GRU hyperparameters
     gru_hidden: int = 128,
     gru_layers: int = 1,
+    gru_bidirectional: bool = False,
     # Transformer hyperparameters (only used if use_transformer=True)
     d_model_seq: int = 96,
     nhead_seq: int = 4,
@@ -310,6 +311,8 @@ def train_sequence_model(
         GRU hidden size.
     gru_layers : int
         Number of GRU layers.
+    gru_bidirectional: bool
+        Whether to use bidirectional GRU.
     num_classes : int
         Number of output classes (sleep stages).
     """
@@ -395,6 +398,7 @@ def train_sequence_model(
             hidden_size=gru_hidden,
             num_layers=gru_layers,
             num_classes=num_classes,
+            bidirectional=gru_bidirectional,
         ).to(device)
     elif use_transformer:
         model = SequenceTransformerClassifier(
@@ -453,6 +457,7 @@ def train_sequence_model(
         'target_tokens': target_tokens,
         'gru_hidden': gru_hidden,
         'gru_layers': gru_layers,
+        'gru_bidirectional': gru_bidirectional,
     }
 
     # Early stopping
@@ -575,6 +580,7 @@ def train_sequence_model(
                     'target_tokens': target_tokens,
                     'gru_hidden': gru_hidden,
                     'gru_layers': gru_layers,
+                    'gru_bidirectional': gru_bidirectional,
                     'num_classes': num_classes,
                 },
                 'preprocessing': preprocess_config.to_dict(),
@@ -610,6 +616,7 @@ def train_sequence_model(
                 'target_tokens': target_tokens,
                 'gru_hidden': gru_hidden,
                 'gru_layers': gru_layers,
+                'gru_bidirectional': gru_bidirectional,
                 'num_classes': num_classes,
             },
             'preprocessing': preprocess_config.to_dict(),
@@ -658,6 +665,7 @@ if __name__ == "__main__":
     # GRU hyperparameters (for sequence modeling)
     GRU_HIDDEN = 128
     GRU_LAYERS = 1
+    GRU_BIDIRECTIONAL = False
     
     # Transformer hyperparameters (only used if USE_TRANSFORMER=True)
     D_MODEL_SEQ = 96
@@ -702,6 +710,7 @@ if __name__ == "__main__":
         use_transformer=USE_TRANSFORMER,
         gru_hidden=GRU_HIDDEN,
         gru_layers=GRU_LAYERS,
+        gru_bidirectional=GRU_BIDIRECTIONAL,
         d_model_seq=D_MODEL_SEQ,
         nhead_seq=NHEAD_SEQ,
         num_layers_seq=NUM_LAYERS_SEQ,

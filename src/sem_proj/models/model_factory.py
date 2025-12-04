@@ -441,10 +441,11 @@ class EpochTransformerConv1D_v2(nn.Module):
 
 ### feeding several epoch embeddings into a sequence model (here, GRU) ###
 class SequenceGRUClassifier(nn.Module):
-    def __init__(self, epoch_model, hidden_size=128, num_layers=1, num_classes=5):
+    def __init__(self, epoch_model, hidden_size=128, num_layers=1, num_classes=5, bidirectional=False):
         super().__init__()
         self.epoch_model = epoch_model          # EpochTransformerConv1d_v2
         self.input_dim = epoch_model.d_model    # d_model (e.g. 64)
+        self.bidirectional = bidirectional
         
         self.gru = nn.GRU(
             input_size=self.input_dim,
@@ -452,9 +453,10 @@ class SequenceGRUClassifier(nn.Module):
             num_layers=num_layers,
             batch_first=True,      # input (B, L, D)
             dropout=0.2,
-            bidirectional=False     # try bidir --> change classifier input size (*2)
+            bidirectional=bidirectional     # try bidir --> change classifier input size (*2)
         )
-        self.classifier = nn.Linear(hidden_size, num_classes)   # evlt increase depth?
+        gru_output_dim = hidden_size * 2 if bidirectional else hidden_size
+        self.classifier = nn.Linear(gru_output_dim, num_classes)
 
     def forward(self, x):
         """
