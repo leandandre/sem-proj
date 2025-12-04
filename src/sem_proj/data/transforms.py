@@ -76,6 +76,50 @@ class RandomAmplitudeScale:
         return x * scale
 
 
+class RandomGaussianNoise:
+    """
+    Add random Gaussian noise to signal during training.
+    
+    Useful for data augmentation to improve robustness to noise.
+    
+    Parameters
+    ----------
+    noise_scale : tuple[float, float]
+        (min_scale, max_scale) for noise magnitude as fraction of epoch std.
+        E.g., (0.01, 0.05) means noise_std = uniform(0.01, 0.05) * epoch_std
+    """
+    
+    def __init__(self, noise_scale: tuple[float, float] = (0.01, 0.05)):
+        self.noise_scale = noise_scale
+    
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Add random Gaussian noise.
+        
+        Parameters
+        ----------
+        x : torch.Tensor, shape (C, T)
+            EEG signal.
+        
+        Returns
+        -------
+        torch.Tensor, shape (C, T)
+            Signal with added noise.
+        """
+        # Compute epoch standard deviation
+        epoch_std = x.std()
+        
+        # Random noise scale factor
+        scale_factor = np.random.uniform(*self.noise_scale)
+        
+        # Noise standard deviation
+        noise_std = scale_factor * epoch_std
+        
+        # Add Gaussian noise
+        noise = torch.randn_like(x) * noise_std
+        return x + noise
+
+
 class Compose:
     """Compose multiple transforms."""
     

@@ -15,6 +15,7 @@ from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_le
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
 from sem_proj.models.model_factory import SSLEpochTransformerConv1D, SSLClassifierHead
+from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
 random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.manual_seed(42); torch.cuda.manual_seed_all(42)
 
@@ -485,11 +486,19 @@ def fine_tune_ssl_encoder(
         tr_subs = list(np.random.choice(tr_subs, n_train, replace=False))
         print(f"Using {len(tr_subs)} training subjects ({label_fraction*100:.0f}% of full set)")
 
+    # augment training data for fine-tuning
+    train_transform = Compose([
+        RandomTimeShift(max_shift_ratio=0.1),      # +-10% time shift
+        RandomAmplitudeScale(scale_range=(0.9, 1.1)),  # +-10% amplitude
+        RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
+    ])
+
     train_ds = BoasDataset(
         subjects=tr_subs,
         mode="headband",
         preprocess_config=preprocess_config,
-        use_cache=use_cache
+        use_cache=use_cache,
+        transform_hb=train_transform
     )
     val_ds = BoasDataset(
         subjects=val_subs,

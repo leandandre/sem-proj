@@ -20,7 +20,7 @@ torch.cuda.manual_seed_all(42)
 from sem_proj.data.datasets import BoasSequenceDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
-from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, Compose
+from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 from sem_proj.models.model_factory import EpochTransformerConv1D_v2, SequenceGRUClassifier, SequenceTransformerClassifier
 
 # Project root = .../sem-proj
@@ -103,8 +103,9 @@ def make_seq_dataloaders(
     train_transform = None
     if use_augmentation:
         train_transform = Compose([
-            RandomTimeShift(max_shift_ratio=0.1),           # +-10% time shift, maybe increase?
-            RandomAmplitudeScale(scale_range=(0.9, 1.1))    # +-10% amplitude, maybe increase?
+            RandomTimeShift(max_shift_ratio=0.15),           # +-15% time shift, maybe increase?
+            RandomAmplitudeScale(scale_range=(0.8, 1.2)),    # +-20% amplitude, maybe increase?
+            RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
         ])
 
     train_ds = BoasSequenceDataset(
@@ -422,7 +423,7 @@ def train_sequence_model(
         print(f"Class weights: {class_weights.cpu().numpy()}\n")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else:
-        manual_weights = torch.tensor([0.7, 2, 0.35, 2, 0.7], dtype=torch.float32, device=device) # change for stronger/weaker weighting
+        manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device) # change for stronger/weaker weighting
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
     
@@ -644,7 +645,7 @@ if __name__ == "__main__":
     NUM_EPOCHS = 50
     BATCH_SIZE = 8          # Smaller because sequences use more memory
     SEQ_LEN = 20            # 20 consecutive epochs = 10 minutes
-    STRIDE = 5              # determines overlap between sequences
+    STRIDE = 1              # determines overlap between sequences
     LEARNING_RATE = 1e-4    # Lower LR for sequence models
     USE_CACHE = True
     WEIGHTED_LOSS = False
@@ -655,7 +656,7 @@ if __name__ == "__main__":
     N_HEAD = 4
     NUM_LAYERS = 2
     DIM_FEEDFORWARD = D_MODEL * 4
-    DROPOUT = 0.2
+    DROPOUT = 0.3
     TARGET_TOKENS = 240     # 240 or 480
     
     # Model type selection
@@ -665,7 +666,7 @@ if __name__ == "__main__":
     # GRU hyperparameters (for sequence modeling)
     GRU_HIDDEN = 128
     GRU_LAYERS = 1
-    GRU_BIDIRECTIONAL = False
+    GRU_BIDIRECTIONAL = True
     
     # Transformer hyperparameters (only used if USE_TRANSFORMER=True)
     D_MODEL_SEQ = 96

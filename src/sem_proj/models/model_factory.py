@@ -452,7 +452,7 @@ class SequenceGRUClassifier(nn.Module):
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,      # input (B, L, D)
-            dropout=0.2,
+            dropout=0.2,        # adjust manually
             bidirectional=bidirectional     # try bidir --> change classifier input size (*2)
         )
         gru_output_dim = hidden_size * 2 if bidirectional else hidden_size

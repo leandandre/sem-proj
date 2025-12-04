@@ -14,7 +14,7 @@ from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
-from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, Compose
+from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
 # Project root = .../sem-proj
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -58,8 +58,9 @@ def make_dataloaders(batch_size: int = 16,
     train_transform = None
     if use_augmentation:
         train_transform = Compose([
-            RandomTimeShift(max_shift_ratio=0.1),      # +-10% time shift
-            RandomAmplitudeScale(scale_range=(0.9, 1.1))  # +-10% amplitude
+            RandomTimeShift(max_shift_ratio=0.15),      # +-15% time shift
+            RandomAmplitudeScale(scale_range=(0.8, 1.2)),  # +-20% amplitude
+            RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
         ])
 
     train_ds = BoasDataset(

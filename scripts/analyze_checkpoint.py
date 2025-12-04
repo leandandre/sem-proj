@@ -15,8 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sem_proj.models.model_factory import EpochTransformer
 
-CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
-# CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints_leomed"
+# CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints_leomed"
 
 
 def load_checkpoint(experiment_name: str, checkpoint_name: str = "best_model.pt"):
@@ -304,18 +304,46 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     hyperparams = checkpoint['hyperparameters']
     train_cfg = checkpoint.get('training_config', {})
     
-    print(f"Model type:          {train_cfg.get('model_type', 'Unknown')}")
-    print(f"Input channels:      {hyperparams['input_channels']}")
-    print(f"Sequence length:     {hyperparams['seq_length']}")
-    print(f"Max tokens:          {train_cfg.get('max_tokens', hyperparams.get('max_tokens', 'N/A'))}")
-    print(f"Patch size:          {train_cfg.get('patch_size', 'N/A')}")
-    print(f"Final seq length:    {train_cfg.get('final_seq_length', 'N/A')} (tokens fed to transformer)")
-    print(f"Embedding dim:       {hyperparams['d_model']}")
-    print(f"Attention heads:     {hyperparams['nhead']}")
-    print(f"Transformer layers:  {hyperparams['num_layers']}")
-    print(f"Feedforward dim:     {hyperparams['dim_feedforward']}")
-    print(f"Dropout:             {hyperparams['dropout']}")
-    print(f"Number of classes:   {hyperparams['num_classes']}")
+    model_type = train_cfg.get('model_type', 'Unknown')
+    print(f"Model type:          {model_type}")
+    
+    # Handle both epoch and sequence models
+    if 'Sequence' in model_type:
+        # Sequence model hyperparameters
+        print(f"Sequence length:     {train_cfg.get('seq_len', 'N/A')} epochs")
+        print(f"Stride:              {train_cfg.get('stride', 'N/A')} epochs")
+        print(f"GRU hidden size:     {hyperparams.get('gru_hidden', 'N/A')}")
+        print(f"GRU layers:          {hyperparams.get('gru_layers', 'N/A')}")
+        if 'gru_bidirectional' in hyperparams:
+            print(f"GRU bidirectional:   {hyperparams.get('gru_bidirectional', False)}")
+        
+        # Transformer hyperparams for sequence if applicable
+        if 'Transformer' in model_type:
+            print(f"Transformer d_model: {hyperparams.get('d_model_seq', 'N/A')}")
+            print(f"Transformer heads:   {hyperparams.get('nhead_seq', 'N/A')}")
+            print(f"Transformer layers:  {hyperparams.get('num_layers_seq', 'N/A')}")
+        
+        # Epoch encoder hyperparameters
+        print(f"\n  EPOCH ENCODER (EpochTransformerConv1D_v2)")
+        print(f"  Embedding dim:       {hyperparams.get('d_model', 'N/A')}")
+        print(f"  Attention heads:     {hyperparams.get('nhead', 'N/A')}")
+        print(f"  Transformer layers:  {hyperparams.get('num_layers', 'N/A')}")
+        print(f"  Feedforward dim:     {hyperparams.get('dim_feedforward', 'N/A')}")
+        print(f"  Target tokens:       {hyperparams.get('target_tokens', 'N/A')}")
+    else:
+        # Epoch model hyperparameters
+        print(f"Input channels:      {hyperparams.get('input_channels', 'N/A')}")
+        print(f"Sequence length:     {hyperparams.get('seq_length', 'N/A')}")
+        print(f"Max tokens:          {train_cfg.get('max_tokens', hyperparams.get('max_tokens', 'N/A'))}")
+        print(f"Patch size:          {train_cfg.get('patch_size', 'N/A')}")
+        print(f"Final seq length:    {train_cfg.get('final_seq_length', 'N/A')} (tokens fed to transformer)")
+        print(f"Embedding dim:       {hyperparams.get('d_model', 'N/A')}")
+        print(f"Attention heads:     {hyperparams.get('nhead', 'N/A')}")
+        print(f"Transformer layers:  {hyperparams.get('num_layers', 'N/A')}")
+        print(f"Feedforward dim:     {hyperparams.get('dim_feedforward', 'N/A')}")
+        print(f"Dropout:             {hyperparams.get('dropout', 'N/A')}")
+    
+    print(f"Number of classes:   {hyperparams.get('num_classes', 'N/A')}")
     
     # Training configuration
     if 'training_config' in checkpoint:
@@ -331,12 +359,12 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
         print(f"Class weighted loss: {train_cfg.get('class_weighted_loss', 'N/A')}")
         print(f"Used cache:          {train_cfg.get('use_cache', 'N/A')}")
         print(f"Trainable params:    {train_cfg.get('num_trainable_params', 'N/A'):,}")
-        print(f"Training samples:    {train_cfg.get('train_samples', 'N/A'):,}")
-        print(f"Validation samples:  {train_cfg.get('val_samples', 'N/A'):,}")
+        print(f"Training sequences:  {train_cfg.get('train_sequences', 'N/A'):,}")
+        print(f"Validation sequences: {train_cfg.get('val_sequences', 'N/A'):,}")
     
     # Class weights (if used)
     if checkpoint.get('class_weights') is not None:
-        print(f"\n  CLASS WEIGHTS")
+        print(f"\n CLASS WEIGHTS")
         print("-" * 80)
         class_weights = checkpoint['class_weights']
         for class_name, weight in zip(class_names, class_weights):
@@ -433,24 +461,44 @@ def plot_confusion_style_summary(checkpoint: dict, experiment_name: str, save_pa
     hp = checkpoint['hyperparameters']
     train_cfg = checkpoint.get('training_config', {})
     
-    max_tokens = train_cfg.get('max_tokens', hp.get('max_tokens', 'N/A'))
-    final_seq_len = train_cfg.get('final_seq_length', 'N/A')
-    patch_size = train_cfg.get('patch_size', 'N/A')
+    model_type = train_cfg.get('model_type', 'Unknown')
     
-    arch_text = f"""
+    # Generate architecture text based on model type
+    if 'Sequence' in model_type:
+        arch_text = f"""
     MODEL ARCHITECTURE
     ───────────────────────
-    Input Seq Length:    {hp['seq_length']}
+    Model Type:          {model_type}
+    Sequence Length:     {train_cfg.get('seq_len', 'N/A')} epochs
+    Stride:              {train_cfg.get('stride', 'N/A')} epochs
+    
+    Epoch Encoder d_model: {hp.get('d_model', 'N/A')}
+    Epoch Transformer Layers: {hp.get('num_layers', 'N/A')}
+    Target Tokens:       {hp.get('target_tokens', 'N/A')}
+    
+    GRU Hidden:          {hp.get('gru_hidden', 'N/A')}
+    GRU Layers:          {hp.get('gru_layers', 'N/A')}
+    """
+    else:
+        max_tokens = train_cfg.get('max_tokens', hp.get('max_tokens', 'N/A'))
+        final_seq_len = train_cfg.get('final_seq_length', 'N/A')
+        patch_size = train_cfg.get('patch_size', 'N/A')
+        
+        arch_text = f"""
+    MODEL ARCHITECTURE
+    ───────────────────────
+    Input Seq Length:    {hp.get('seq_length', 'N/A')}
     Patch Size:          {patch_size}
     Final Tokens:        {final_seq_len}
     Max Tokens:          {max_tokens}
     
-    Embedding Dim:       {hp['d_model']}
-    Attention Heads:     {hp['nhead']}
-    Transformer Layers:  {hp['num_layers']}
-    Feedforward Dim:     {hp['dim_feedforward']}
-    Dropout:             {hp['dropout']}
+    Embedding Dim:       {hp.get('d_model', 'N/A')}
+    Attention Heads:     {hp.get('nhead', 'N/A')}
+    Transformer Layers:  {hp.get('num_layers', 'N/A')}
+    Feedforward Dim:     {hp.get('dim_feedforward', 'N/A')}
+    Dropout:             {hp.get('dropout', 'N/A')}
     """
+    
     ax3.text(0.1, 0.5, arch_text, fontsize=11, family='monospace',
              verticalalignment='center', bbox=dict(boxstyle='round',
              facecolor='lightblue', alpha=0.5))
