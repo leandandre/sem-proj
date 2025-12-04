@@ -21,8 +21,11 @@ echo "Current dir: $(pwd)"
 # 3) Go to project root
 cd /cluster/work/smslab/2025-eeg_headband/sem-proj
 
-# 4) GPU info
+# 4) Add src to PYTHONPATH
+export PYTHONPATH="/cluster/work/smslab/2025-eeg_headband/sem-proj/src:$PYTHONPATH"
+
+# 5) GPU info
 nvidia-smi
 
-# 5) Run your training script
-python -u src/sem_proj/training/epoch_models.py
+# 6) Run your training script using module path
+python -u -m sem_proj.training.epoch_models
