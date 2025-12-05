@@ -271,10 +271,10 @@ def train_epochtransformer(
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else: # manual weights or unweighted
-        manual_weights = torch.tensor([1.0, 1.5, 0.7, 1.5, 1.0], dtype=torch.float32, device=device)
+        manual_weights = torch.tensor([1, 1, 1, 1, 1], dtype=torch.float32, device=device)
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-2, weight_decay=1e-2)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='max', factor=0.5, patience=6
@@ -442,17 +442,17 @@ def train_epochtransformer(
 
 if __name__ == "__main__":
     # Configuration
-    CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
+    # CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
     # CONFIG_NAME = "no_preprocess"                  # No preprocessing
     # CONFIG_NAME = "notch_bandpass"                 # Just filters
     # CONFIG_NAME = "notch_bandpass_znorm"           # Filters + znorm
-    # CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample
+    CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample
     # CONFIG_NAME = "only_znorm"                     # Just normalization
     
     # Training hyperparameters
     NUM_EPOCHS = 120
     BATCH_SIZE = 128     # look at GPU memory and choose in {32, 64, 128, 256}
-    LEARNING_RATE = 2e-3    # try 1e-3, 2e-3, 5e-4, depending on model size
+    LEARNING_RATE = 5e-6    # try 1e-3, 2e-3, 5e-4, depending on model size
     USE_CACHE = True    # Set to False to disable caching
 
     WEIGHTED_LOSS = False  # Set to True to use class-balanced loss

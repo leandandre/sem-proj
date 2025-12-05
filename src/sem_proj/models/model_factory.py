@@ -469,11 +469,11 @@ class MultiChannelSleepNet(nn.Module):
         fs: int = 128,               # sampling frequency (Hz)
         epoch_len_sec: int = 30,     # each window is 30s
         n_fft: int = 256,            # FFT size
-        num_head: int = 8,
-        forward_hidden: int = 1024,  # FFN hidden dim inside transformer
-        num_encoder: int = 16,       # single-channel transformer depth
-        num_encoder_multi: int = 4,  # multichannel transformer depth
-        fc_hidden: int = 1024,       # classifier hidden dim
+        num_head: int = 4,
+        forward_hidden: int = 512,  # FFN hidden dim inside transformer
+        num_encoder: int = 6,       # single-channel transformer depth (number of layers)
+        num_encoder_multi: int = 2,  # multichannel transformer depth
+        fc_hidden: int = 512,       # classifier hidden dim
         dropout_tf: float = 0.5,     # dropout before multi-block & in FC
         dropout_tr: float = 0.1,     # dropout inside transformers & PE
     ):
@@ -524,13 +524,17 @@ class MultiChannelSleepNet(nn.Module):
             batch_first=True,  # x: (B, T, F)
         )
 
-        # One TransformerEncoder per channel
-        self.single_encoders = nn.ModuleList(
-            [
-                nn.TransformerEncoder(enc_layer_single, num_layers=num_encoder)
-                for _ in range(num_channels)
-            ]
-        )
+        # # One TransformerEncoder per channel
+        # self.single_encoders = nn.ModuleList(
+        #     [
+        #         nn.TransformerEncoder(enc_layer_single, num_layers=num_encoder)
+        #         for _ in range(num_channels)
+        #     ]
+        # )
+
+        # Alternative: shared single-channel transformer for all channels
+        self.single_encoder = nn.TransformerEncoder(enc_layer_single, num_layers=num_encoder)
+
 
         # --- Multichannel fusion transformer block ---
         self.drop_multi = nn.Dropout(p=dropout_tf)
@@ -554,14 +558,23 @@ class MultiChannelSleepNet(nn.Module):
             num_layers=num_encoder_multi,
         )
 
-        # --- Classifier ---
-        in_fc = self.pad_size * self.dim_model * num_channels
+        # # --- Classifier ---
+        # in_fc = self.pad_size * self.dim_model * num_channels
+        # self.fc1 = nn.Sequential(
+        #     nn.Linear(in_fc, fc_hidden),
+        #     nn.ReLU(),
+        #     nn.Dropout(p=dropout_tf),
+        # )
+        # self.fc2 = nn.Linear(fc_hidden, num_classes)
+
+        in_fc = self.dim_model * num_channels
         self.fc1 = nn.Sequential(
             nn.Linear(in_fc, fc_hidden),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(p=dropout_tf),
         )
         self.fc2 = nn.Linear(fc_hidden, num_classes)
+
 
     # ==========================================================
     # 1) Raw 1D → time-frequency images
@@ -625,12 +638,20 @@ class MultiChannelSleepNet(nn.Module):
         assert T == self.pad_size
         assert F == self.dim_model
 
-        # 2) Single-channel transformer per channel
+        # # 2) Single-channel transformer per channel
+        # O_list = []
+        # for c in range(C):
+        #     xc = x_img[:, c, :, :]               # (B, T, F)
+        #     xc = self.position_single(xc)        # add PE
+        #     xc = self.single_encoders[c](xc)     # transformer stack
+        #     O_list.append(xc)
+        
+        # Alternative: shared single-channel transformer
         O_list = []
         for c in range(C):
-            xc = x_img[:, c, :, :]               # (B, T, F)
-            xc = self.position_single(xc)        # add PE
-            xc = self.single_encoders[c](xc)     # transformer stack
+            xc = x_img[:, c, :, :]            # (B, T, F)
+            xc = self.position_single(xc)
+            xc = self.single_encoder(xc)      # shared for all channels
             O_list.append(xc)
 
         # 3) Multichannel fusion transformer
@@ -645,10 +666,14 @@ class MultiChannelSleepNet(nn.Module):
         # Outer residual
         x_multi = self.layer_norm_multi(x_multi + residual)
 
-        # 4) Classifier
-        x_flat = x_multi.reshape(B, -1)          # (B, T*C*F)
-        x = self.fc1(x_flat)                     # (B, fc_hidden)
-        logits = self.fc2(x)                     # (B, num_classes)
+        # # 4) Classifier
+        # x_flat = x_multi.reshape(B, -1)          # (B, T*C*F)
+        # x = self.fc1(x_flat)                     # (B, fc_hidden)
+        # logits = self.fc2(x)                     # (B, num_classes)
+
+        x_pooled = x_multi.mean(dim=1)               # (B, C*F) - average pooling over time
+        x = self.fc1(x_pooled)                       # (B, fc_hidden)
+        logits = self.fc2(x)                         # (B, num_classes)
 
         return logits
 
