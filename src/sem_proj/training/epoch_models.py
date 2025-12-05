@@ -58,9 +58,9 @@ def make_dataloaders(batch_size: int = 16,
     train_transform = None
     if use_augmentation:
         train_transform = Compose([
-            RandomTimeShift(max_shift_ratio=0.15),      # +-15% time shift
-            RandomAmplitudeScale(scale_range=(0.8, 1.2)),  # +-20% amplitude
-            RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
+            RandomTimeShift(max_shift_ratio=0.10),      # +-% time shift
+            RandomAmplitudeScale(scale_range=(0.9, 1.1)),  # +-% amplitude
+            # RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
         ])
 
     train_ds = BoasDataset(
@@ -271,10 +271,10 @@ def train_epochtransformer(
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else: # manual weights or unweighted
-        manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device)
+        manual_weights = torch.tensor([1.0, 1.5, 0.7, 1.5, 1.0], dtype=torch.float32, device=device)
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='max', factor=0.5, patience=6
@@ -331,7 +331,7 @@ def train_epochtransformer(
             loss = criterion(logits, y)
             
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             
             batch_loss = loss.item()
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     # Training hyperparameters
     NUM_EPOCHS = 120
     BATCH_SIZE = 128     # look at GPU memory and choose in {32, 64, 128, 256}
-    LEARNING_RATE = 1e-3
+    LEARNING_RATE = 2e-3    # try 1e-3, 2e-3, 5e-4, depending on model size
     USE_CACHE = True    # Set to False to disable caching
 
     WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
