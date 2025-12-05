@@ -12,7 +12,7 @@ random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.ma
 
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
-from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2
+from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2, MultiChannelSleepNet
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
 from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
@@ -170,7 +170,7 @@ def train_epochtransformer(
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
     class_weighted_loss: bool = False,
-    use_conv1d: bool = False,
+    method: str = "conv_transformer",
     use_augmentation: bool = True
 ):
     """
@@ -238,12 +238,17 @@ def train_epochtransformer(
             default_model_cfg['seq_length'] = seq_length
 
     # Choose model architecture
-    if use_conv1d:
+    if method == "conv_transformer":
         model = EpochTransformerConv1D_v2(**default_model_cfg).to(device)
         print("Using Conv1D patch embedding")
-    else:
+    elif method == "mean_pool_transformer":
         model = EpochTransformer(**default_model_cfg).to(device)
         print("Using mean-pooling patch embedding")
+    elif method == "multichannel_sleepnet":
+        model = MultiChannelSleepNet().to(device)   # use default params of the model
+        print("Using MultiChannelSleepNet model")
+    else: 
+        raise ValueError(f"Unknown method: {method}")
     
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Model has {num_params:,} trainable parameters\n")
@@ -266,7 +271,7 @@ def train_epochtransformer(
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else: # manual weights or unweighted
-        manual_weights = torch.tensor([0.76, 1.53, 0.42, 1.53, 0.76], dtype=torch.float32, device=device)
+        manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device)
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -282,8 +287,7 @@ def train_epochtransformer(
         'learning_rate': lr,
         'use_cache': use_cache,
         'class_weighted_loss': class_weighted_loss,
-        'use_conv1d': use_conv1d,
-        'model_type': 'EpochTransformerConv1D_v2' if use_conv1d else 'EpochTransformer',
+        'method': method,
         'optimizer': 'Adam',
         'scheduler': 'ReduceLROnPlateau',
         'scheduler_patience': 6,
@@ -292,7 +296,7 @@ def train_epochtransformer(
         'num_trainable_params': num_params,
         'train_samples': len(train_loader.dataset),
         'val_samples': len(val_loader.dataset),
-        'target_tokens': model.target_tokens,
+        # 'target_tokens': model.target_tokens,
         # 'patch_size': model.patch_size,
         # 'final_seq_length': model.final_seq_length
     }
@@ -327,7 +331,7 @@ def train_epochtransformer(
             loss = criterion(logits, y)
             
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             
             batch_loss = loss.item()
@@ -452,7 +456,7 @@ if __name__ == "__main__":
     USE_CACHE = True    # Set to False to disable caching
 
     WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
-    USE_CONV1D = True  # Set to True to use Conv1D patch embedding
+    METHOD = 'multichannel_sleepnet'  # select {'conv_transformer', 'mean_pool_transformer', 'multichannel_sleepnet'}
     USE_AUGMENTATION = True  # Set to True to use data augmentation
     
     D_MODEL = 96  # Reduced model size for testing, change to 64 later
@@ -483,9 +487,9 @@ if __name__ == "__main__":
     }
     
     # Generate experiment name based on config
-    VERSION = 2     # CHANGE for each new run
-    model_type = "conv1d_v2_augm" if USE_CONV1D else "meanpool"
-    experiment_name = f"epochtransformer_{model_type}_{CONFIG_NAME}_v{VERSION}"
+    VERSION = 1     # CHANGE for each new run
+    model_type = METHOD
+    experiment_name = f"epochlevel_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with {model_type} model")
     print(f" Config file: {config_file}")
@@ -499,6 +503,6 @@ if __name__ == "__main__":
         preprocess_config=preproc_cfg,
         use_cache=USE_CACHE,
         class_weighted_loss=WEIGHTED_LOSS,
-        use_conv1d=USE_CONV1D,
+        method=METHOD,
         use_augmentation=USE_AUGMENTATION
     )

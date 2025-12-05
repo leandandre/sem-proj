@@ -439,6 +439,223 @@ class EpochTransformerConv1D_v2(nn.Module):
         return logits
     
 
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 29):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)          # (T, d_model)
+        position = torch.arange(0., max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0., d_model, 2) * -(math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)                        # (1, T, d_model)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, T, d_model)
+        x = x + self.pe[:, :x.size(1)]
+        return self.dropout(x)
+
+class MultiChannelSleepNet(nn.Module):
+    def __init__(
+        self,
+        num_channels: int = 2,
+        num_classes: int = 5,
+        fs: int = 128,               # sampling frequency (Hz)
+        epoch_len_sec: int = 30,     # each window is 30s
+        n_fft: int = 256,            # FFT size
+        num_head: int = 8,
+        forward_hidden: int = 1024,  # FFN hidden dim inside transformer
+        num_encoder: int = 16,       # single-channel transformer depth
+        num_encoder_multi: int = 4,  # multichannel transformer depth
+        fc_hidden: int = 1024,       # classifier hidden dim
+        dropout_tf: float = 0.5,     # dropout before multi-block & in FC
+        dropout_tr: float = 0.1,     # dropout inside transformers & PE
+    ):
+        super().__init__()
+
+        # --- STFT / time-frequency parameters ---
+        self.num_channels = num_channels
+        self.num_classes = num_classes
+        self.fs = fs
+        self.epoch_len_sec = epoch_len_sec
+        self.n_fft = n_fft
+
+        # STFT window & hop (2s window, 1s overlap)
+        self.win_length = int(2 * fs)   # samples per window
+        self.hop_length = int(1 * fs)   # stride between windows
+        assert self.win_length <= self.n_fft, (
+            "win_length must be <= n_fft (pad/truncate if needed)."
+        )
+
+        # Frequency bins after dropping DC:  n_fft/2
+        self.freq_bins = self.n_fft // 2  # e.g. 128
+        self.dim_model = self.freq_bins   # transformer feature dim
+
+        # Number of time steps (frames) for 30s
+        # T = floor((L - win_length) / hop_length) + 1
+        L_expected = epoch_len_sec * fs
+        self.pad_size = int((L_expected - self.win_length) / self.hop_length) + 1
+
+        # STFT window (Hann)
+        self.register_buffer(
+            "stft_window",
+            torch.hann_window(self.win_length),
+            persistent=False,
+        )
+
+        # --- Single-channel transformer block ---
+        self.position_single = PositionalEncoding(
+            d_model=self.dim_model,
+            dropout=dropout_tr,
+            max_len=self.pad_size,
+        )
+
+        enc_layer_single = nn.TransformerEncoderLayer(
+            d_model=self.dim_model,
+            nhead=num_head,
+            dim_feedforward=forward_hidden,
+            dropout=dropout_tr,
+            batch_first=True,  # x: (B, T, F)
+        )
+
+        # One TransformerEncoder per channel
+        self.single_encoders = nn.ModuleList(
+            [
+                nn.TransformerEncoder(enc_layer_single, num_layers=num_encoder)
+                for _ in range(num_channels)
+            ]
+        )
+
+        # --- Multichannel fusion transformer block ---
+        self.drop_multi = nn.Dropout(p=dropout_tf)
+        self.layer_norm_multi = nn.LayerNorm(self.dim_model * num_channels)
+
+        self.position_multi = PositionalEncoding(
+            d_model=self.dim_model * num_channels,
+            dropout=dropout_tr,
+            max_len=self.pad_size,
+        )
+
+        enc_layer_multi = nn.TransformerEncoderLayer(
+            d_model=self.dim_model * num_channels,
+            nhead=num_head,
+            dim_feedforward=forward_hidden,
+            dropout=dropout_tr,
+            batch_first=True,
+        )
+        self.transformer_encoder_multi = nn.TransformerEncoder(
+            enc_layer_multi,
+            num_layers=num_encoder_multi,
+        )
+
+        # --- Classifier ---
+        in_fc = self.pad_size * self.dim_model * num_channels
+        self.fc1 = nn.Sequential(
+            nn.Linear(in_fc, fc_hidden),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_tf),
+        )
+        self.fc2 = nn.Linear(fc_hidden, num_classes)
+
+    # ==========================================================
+    # 1) Raw 1D → time-frequency images
+    # ==========================================================
+    def raw_to_tf(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (B, C, L) raw signal per 30s epoch.
+        Returns: (B, C, T, F) time-frequency images.
+        T = number of time frames (self.pad_size)
+        F = number of frequency bins (self.freq_bins)
+        """
+        B, C, L = x.shape
+        assert C == self.num_channels, "Channel count mismatch."
+        expected_L = self.epoch_len_sec * self.fs
+        assert L == expected_L, f"Expected length {expected_L}, got {L}."
+
+        # Merge batch and channel for STFT
+        xc = x.view(B * C, L)  # (B*C, L)
+
+        spec = torch.stft(
+            xc,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=self.stft_window.to(x.device),
+            center=False,
+            return_complex=True,
+        )  # (B*C, freq_all, T)
+
+        # Magnitude → log-power (dB)
+        spec = spec.abs()                      # (B*C, F_all, T)
+        spec = 20 * torch.log10(spec + 1e-8)
+
+        # Drop DC (freq=0), keep next self.freq_bins bins
+        spec = spec[:, 1 : self.freq_bins + 1, :]   # (B*C, F, T)
+
+        # Per-(sample,channel) normalization over time & freq
+        mean = spec.mean(dim=(1, 2), keepdim=True)
+        std = spec.std(dim=(1, 2), keepdim=True) + 1e-5
+        spec = (spec - mean) / std
+
+        # Reshape to (B, C, T, F)
+        spec = spec.view(B, C, self.freq_bins, self.pad_size)  # (B, C, F, T)
+        spec = spec.permute(0, 1, 3, 2)                        # (B, C, T, F)
+
+        return spec
+
+    # ==========================================================
+    # 2) Forward: raw → TF images → transformer → logits
+    # ==========================================================
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (B, C, L) raw per-epoch signal.
+        Returns: logits with shape (B, num_classes).
+        """
+        # 1) Raw → time-frequency images
+        x_img = self.raw_to_tf(x)        # (B, C, T, F)
+        B, C, T, F = x_img.shape
+
+        assert C == self.num_channels
+        assert T == self.pad_size
+        assert F == self.dim_model
+
+        # 2) Single-channel transformer per channel
+        O_list = []
+        for c in range(C):
+            xc = x_img[:, c, :, :]               # (B, T, F)
+            xc = self.position_single(xc)        # add PE
+            xc = self.single_encoders[c](xc)     # transformer stack
+            O_list.append(xc)
+
+        # 3) Multichannel fusion transformer
+        x_multi = torch.cat(O_list, dim=2)       # (B, T, C*F)
+        x_multi = self.drop_multi(x_multi)
+        x_multi = self.layer_norm_multi(x_multi)
+        residual = x_multi
+
+        x_multi = self.position_multi(x_multi)
+        x_multi = self.transformer_encoder_multi(x_multi)  # (B, T, C*F)
+
+        # Outer residual
+        x_multi = self.layer_norm_multi(x_multi + residual)
+
+        # 4) Classifier
+        x_flat = x_multi.reshape(B, -1)          # (B, T*C*F)
+        x = self.fc1(x_flat)                     # (B, fc_hidden)
+        logits = self.fc2(x)                     # (B, num_classes)
+
+        return logits
+
+
+
+    
+
 ### feeding several epoch embeddings into a sequence model (here, GRU) ###
 class SequenceGRUClassifier(nn.Module):
     def __init__(self, epoch_model, hidden_size=128, num_layers=1, num_classes=5, bidirectional=False):
