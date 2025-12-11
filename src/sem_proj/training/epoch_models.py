@@ -1,4 +1,5 @@
 from typing import Optional
+from xml.parsers.expat import model
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -12,7 +13,7 @@ random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.ma
 
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
-from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2, MultiChannelSleepNet
+from sem_proj.models.model_factory import EpochTransformer, EpochTransformerConv1D, EpochTransformerConv1D_v2, MultiChannelSleepNet, MultiChannelSleepNet_v2
 from sem_proj.data.splits import load_splits, get_train_subjects, get_val_subjects
 from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
@@ -60,22 +61,26 @@ def make_dataloaders(batch_size: int = 16,
         train_transform = Compose([
             RandomTimeShift(max_shift_ratio=0.10),      # +-% time shift
             RandomAmplitudeScale(scale_range=(0.9, 1.1)),  # +-% amplitude
-            # RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
+            RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
         ])
 
     train_ds = BoasDataset(
         subjects=tr_subs, 
+        # mode="headband",
         mode="headband",
         preprocess_config=preprocess_config,
         use_cache=use_cache,
         transform_hb=train_transform    # augment training samples
+        # transform_psg=train_transform    
     )
     val_ds = BoasDataset(
         subjects=val_subs, 
+        # mode="headband",
         mode="headband",
         preprocess_config=preprocess_config,
         use_cache=use_cache,
         transform_hb=None   # no augmentation for validation
+        # transform_psg=None
     )
 
     train_loader = DataLoader(
@@ -245,7 +250,7 @@ def train_epochtransformer(
         model = EpochTransformer(**default_model_cfg).to(device)
         print("Using mean-pooling patch embedding")
     elif method == "multichannel_sleepnet":
-        model = MultiChannelSleepNet().to(device)   # use default params of the model
+        model = MultiChannelSleepNet_v2().to(device)   # use default params of the model
         print("Using MultiChannelSleepNet model")
     else: 
         raise ValueError(f"Unknown method: {method}")
@@ -271,13 +276,14 @@ def train_epochtransformer(
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else: # manual weights or unweighted
-        manual_weights = torch.tensor([1, 1, 1, 1, 1], dtype=torch.float32, device=device)
+        manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device)
+        # manual_weights = torch.tensor([1., 1., 1., 1., 1.], dtype=torch.float32, device=device)
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-2, weight_decay=1e-2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=6
+        optimizer, mode='max', factor=0.25, patience=6
     )
 
     # Create complete training config dictionary
@@ -331,7 +337,15 @@ def train_epochtransformer(
             loss = criterion(logits, y)
             
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+            # # print gradient norm before clipping
+            # total_norm = 0
+            # for p in model.parameters():
+            #     if p.grad is not None:
+            #         param_norm = p.grad.data.norm(2)
+            #         total_norm += param_norm.item() ** 2
+            # total_norm = total_norm ** 0.5
+            # print(f"Grad norm: {total_norm:.4f}")
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             optimizer.step()
             
             batch_loss = loss.item()
@@ -446,25 +460,25 @@ if __name__ == "__main__":
     # CONFIG_NAME = "no_preprocess"                  # No preprocessing
     # CONFIG_NAME = "notch_bandpass"                 # Just filters
     # CONFIG_NAME = "notch_bandpass_znorm"           # Filters + znorm
-    CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample
+    CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample, use this when using MultiChannelSleepNet!
     # CONFIG_NAME = "only_znorm"                     # Just normalization
     
     # Training hyperparameters
     NUM_EPOCHS = 120
-    BATCH_SIZE = 128     # look at GPU memory and choose in {32, 64, 128, 256}
-    LEARNING_RATE = 5e-6    # try 1e-3, 2e-3, 5e-4, depending on model size
+    BATCH_SIZE = 512     # look at GPU memory and choose in {32, 64, 128, 256}
+    LEARNING_RATE = 5e-4    # try 1e-3, 2e-3, 5e-4, depending on model size
     USE_CACHE = True    # Set to False to disable caching
 
     WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
     METHOD = 'multichannel_sleepnet'  # select {'conv_transformer', 'mean_pool_transformer', 'multichannel_sleepnet'}
     USE_AUGMENTATION = True  # Set to True to use data augmentation
     
-    D_MODEL = 96  # Reduced model size for testing, change to 64 later
+    D_MODEL = 96  # 64, 96, 128
     N_HEAD = 4     # 4 or 8 heads
     NUM_LAYERS = 2
     DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
     DROPOUT = 0.2
-    TARGET_TOKENS = 240   # SHOULD BE in {240, 480}
+    TARGET_TOKENS = 240   # SHOULD BE in {240, 480}, prefer 240
     
     
     # Load preprocessing config
@@ -476,7 +490,7 @@ if __name__ == "__main__":
     
     # Model config (seq_length is automatically determined from preprocessing)
     model_cfg = {
-        'input_channels': 2,   # fixed for headband data
+        'input_channels': 2,   # 2 for Headband data, 6 for PGS
         'd_model': D_MODEL,
         'nhead': N_HEAD,
         'num_layers': NUM_LAYERS,
@@ -487,8 +501,8 @@ if __name__ == "__main__":
     }
     
     # Generate experiment name based on config
-    VERSION = 1     # CHANGE for each new run
-    model_type = METHOD
+    VERSION = 3     # CHANGE for each new run
+    model_type = METHOD + '_v2'
     experiment_name = f"epochlevel_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with {model_type} model")

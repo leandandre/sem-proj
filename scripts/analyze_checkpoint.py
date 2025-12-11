@@ -304,11 +304,31 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
     hyperparams = checkpoint['hyperparameters']
     train_cfg = checkpoint.get('training_config', {})
     
+    method = train_cfg.get('method', 'unknown')
     model_type = train_cfg.get('model_type', 'Unknown')
-    print(f"Model type:          {model_type}")
+    print(f"Model type:          {method or model_type}")
     
-    # Handle both epoch and sequence models
-    if 'Sequence' in model_type:
+    # Handle different model types
+    if 'multichannel_sleepnet' in method.lower():
+        # MultiChannelSleepNet hyperparameters
+        print(f"Sampling frequency:  {hyperparams.get('fs', 128)} Hz")
+        print(f"Epoch length:        {hyperparams.get('epoch_len_sec', 30)} sec")
+        print(f"FFT size:            {hyperparams.get('n_fft', 256)}")
+        print(f"Frequency bins:      {hyperparams.get('freq_bins', 128)}")
+        print(f"Time frames:         {hyperparams.get('pad_size', 'N/A')}")
+        print(f"\n  SINGLE-CHANNEL TRANSFORMER")
+        print(f"  Attention heads:     {hyperparams.get('num_head', 'N/A')}")
+        print(f"  Transformer layers:  {hyperparams.get('num_encoder', 'N/A')}")
+        print(f"  Feedforward dim:     {hyperparams.get('forward_hidden', 'N/A')}")
+        print(f"\n  MULTI-CHANNEL FUSION TRANSFORMER")
+        print(f"  Attention heads:     {hyperparams.get('num_head', 'N/A')}")
+        print(f"  Transformer layers:  {hyperparams.get('num_encoder_multi', 'N/A')}")
+        print(f"  Feedforward dim:     {hyperparams.get('forward_hidden', 'N/A')}")
+        print(f"\n  CLASSIFIER")
+        print(f"  FC hidden dim:       {hyperparams.get('fc_hidden', 'N/A')}")
+        print(f"  Dropout (fusion):    {hyperparams.get('dropout_tf', 'N/A')}")
+        print(f"  Dropout (internal):  {hyperparams.get('dropout_tr', 'N/A')}")
+    elif 'Sequence' in model_type:
         # Sequence model hyperparameters
         print(f"Sequence length:     {train_cfg.get('seq_len', 'N/A')} epochs")
         print(f"Stride:              {train_cfg.get('stride', 'N/A')} epochs")
@@ -331,7 +351,7 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
         print(f"  Feedforward dim:     {hyperparams.get('dim_feedforward', 'N/A')}")
         print(f"  Target tokens:       {hyperparams.get('target_tokens', 'N/A')}")
     else:
-        # Epoch model hyperparameters
+        # Epoch model hyperparameters (Conv1D or mean-pool)
         print(f"Input channels:      {hyperparams.get('input_channels', 'N/A')}")
         print(f"Sequence length:     {hyperparams.get('seq_length', 'N/A')}")
         print(f"Max tokens:          {train_cfg.get('max_tokens', hyperparams.get('max_tokens', 'N/A'))}")
@@ -359,8 +379,8 @@ def print_checkpoint_info(checkpoint: dict, experiment_name: str):
         print(f"Class weighted loss: {train_cfg.get('class_weighted_loss', 'N/A')}")
         print(f"Used cache:          {train_cfg.get('use_cache', 'N/A')}")
         print(f"Trainable params:    {train_cfg.get('num_trainable_params', 'N/A'):,}")
-        print(f"Training sequences:  {train_cfg.get('train_sequences', 'N/A'):,}")
-        print(f"Validation sequences: {train_cfg.get('val_sequences', 'N/A'):,}")
+        print(f"Training samples:    {train_cfg.get('train_samples', 'N/A'):,}")
+        print(f"Validation samples:  {train_cfg.get('val_samples', 'N/A'):,}")
     
     # Class weights (if used)
     if checkpoint.get('class_weights') is not None:
@@ -461,10 +481,26 @@ def plot_confusion_style_summary(checkpoint: dict, experiment_name: str, save_pa
     hp = checkpoint['hyperparameters']
     train_cfg = checkpoint.get('training_config', {})
     
+    method = train_cfg.get('method', 'unknown')
     model_type = train_cfg.get('model_type', 'Unknown')
     
     # Generate architecture text based on model type
-    if 'Sequence' in model_type:
+    if 'multichannel_sleepnet' in method.lower():
+        arch_text = f"""
+    MODEL ARCHITECTURE
+    ───────────────────────
+    Model Type:          MultiChannelSleepNet
+    Sampling Frequency:  {hp.get('fs', 128)} Hz
+    FFT Size:            {hp.get('n_fft', 256)}
+    
+    Single-Ch Layers:    {hp.get('num_encoder', 'N/A')}
+    Fusion Layers:       {hp.get('num_encoder_multi', 'N/A')}
+    Attn Heads:          {hp.get('num_head', 'N/A')}
+    
+    FC Hidden Dim:       {hp.get('fc_hidden', 'N/A')}
+    Dropout:             {hp.get('dropout_tf', 'N/A')}
+    """
+    elif 'Sequence' in model_type:
         arch_text = f"""
     MODEL ARCHITECTURE
     ───────────────────────
@@ -572,7 +608,7 @@ def main():
     parser.add_argument('--top-k', type=int, default=None,
                        help='Show top-K models by macro F1 (e.g., --top-k 4)')
     parser.add_argument('--checkpoint-dir', type=str, default=None,
-                       help='Checkpoint directory (default: checkpoints_leomed)')
+                       help='Checkpoint directory (default: checkpoints)')
     parser.add_argument('--filter', type=str, default=None,
                        help='Only include experiments containing this string (e.g., "conv1d_v2")')
     
@@ -626,7 +662,7 @@ def main():
         parser.print_help()
         print(f"\nScanning: {checkpoint_dir}")
         print("\nAvailable checkpoints:")
-        for exp_dir in checkpoint_dir.iterdir():
+        for exp_dir in sorted(checkpoint_dir.iterdir()):
             if exp_dir.is_dir():
                 print(f"  - {exp_dir.name}")
 
@@ -636,13 +672,14 @@ if __name__ == "__main__":
     if len(sys.argv) == 1:
         print("Usage examples:")
         print("  python scripts/analyze_checkpoint.py epochtransformer_notch_bandpass_resample_znorm_v1")
-        print("  python scripts/analyze_checkpoint.py epochtransformer_notch_bandpass_resample_znorm_v1 --save-plots")
-        print("  python scripts/analyze_checkpoint.py --compare epochtransformer_notch_bandpass_resample_znorm_v1 epochtransformer_notch_bandpass_resample_znorm_v2")
+        print("  python scripts/analyze_checkpoint.py epochlevel_multichannel_sleepnet_notch_bandpass_resample_v1")
+        print("  python scripts/analyze_checkpoint.py epochlevel_multichannel_sleepnet_notch_bandpass_resample_v1 --save-plots")
+        print("  python scripts/analyze_checkpoint.py --compare exp1 exp2")
         print("  python scripts/analyze_checkpoint.py --top-k 4")
         print("  python scripts/analyze_checkpoint.py --top-k 4 --save-plots")
         print("  python scripts/analyze_checkpoint.py --top-k 4 --checkpoint-dir checkpoints")
-        print("  python scripts/analyze_checkpoint.py --top-k 4 --filter conv1d_v2")
-        print("  python scripts/analyze_checkpoint.py --top-k 4 --filter conv1d_v2 --save-plots")
+        print("  python scripts/analyze_checkpoint.py --top-k 4 --filter multichannel_sleepnet")
+        print("  python scripts/analyze_checkpoint.py --top-k 4 --filter multichannel_sleepnet --save-plots")
         print("\nAvailable checkpoint directories:")
         print("  - checkpoints")
         print("  - checkpoints_leomed")

@@ -124,9 +124,9 @@ def train_ssl_epochtransformer(
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
     use_conv1d: bool = True,
-    temperature: float = 0.07,          # ADD THIS
-    lambda_token: float = 1.0,          # ADD THIS
-    lambda_global: float = 1.0,         # ADD THIS
+    temperature: float = 0.07,          
+    lambda_token: float = 1.0,          
+    lambda_global: float = 1.0,       
 ):
     """
     Train SSL encoder with cross-modal contrastive learning.

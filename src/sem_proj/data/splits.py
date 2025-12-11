@@ -1,6 +1,7 @@
 """
 Fixed data splits for BOAS dataset.
 Creates train/val/test splits once and saves them to disk.
+USED IN EARLY STAGE. TRYING TO FIND BEST MODELS
 """
 from pathlib import Path
 import json
