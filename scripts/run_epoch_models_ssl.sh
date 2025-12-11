@@ -24,6 +24,9 @@ cd /cluster/work/smslab/2025-eeg_headband/sem-proj
 # 4) Add src to PYTHONPATH
 export PYTHONPATH="/cluster/work/smslab/2025-eeg_headband/sem-proj/src:$PYTHONPATH"
 
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # 5) GPU info
 nvidia-smi
 

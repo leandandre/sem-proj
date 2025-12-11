@@ -460,7 +460,7 @@ def train_variable_gru(
         ], weight_decay=1e-2)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=5, verbose=True
+        optimizer, mode='max', factor=0.5, patience=8, verbose=True
     )
     
     ### use mixed precision training ###

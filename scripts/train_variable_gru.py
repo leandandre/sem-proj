@@ -84,7 +84,7 @@ def main():
         # Training settings
         class_weighted_loss=True,        # Balance class distribution
         gradient_clip=5.0,
-        early_stopping_patience=10,
+        early_stopping_patience=12,
         num_classes=5,
     )
     

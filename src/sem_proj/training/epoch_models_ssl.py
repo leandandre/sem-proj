@@ -228,14 +228,14 @@ def train_ssl_epochtransformer(
         'optimizer': 'AdamW',
         'weight_decay': 0.01,
         'scheduler': 'ReduceLROnPlateau',
-        'early_stop_patience': 12,
+        'early_stop_patience': 10,
         'num_params_hb': num_params_hb,
         'num_params_psg': num_params_psg,
         'train_samples': len(train_loader.dataset),
         'val_samples': len(val_loader.dataset),
     }
 
-    early_stop_patience = 12
+    early_stop_patience = 10
     epochs_since_improvement = 0
     best_val_loss = float('inf')  # for SSL track loss, not F1
     global_step = 0
@@ -565,7 +565,7 @@ def fine_tune_ssl_encoder(
     }
 
     # === TRAINING LOOP ===
-    early_stop_patience = 12
+    early_stop_patience = 10
     epochs_since_improvement = 0
     best_macro_f1 = 0.0
     global_step = 0
