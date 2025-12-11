@@ -14,7 +14,7 @@ import random, os
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
-from sem_proj.models.model_factory import SSLEpochTransformerConv1D, SSLClassifierHead
+from sem_proj.models.model_factory import SSLEpochTransformerConv1D, SSLEpochTransformerConv1D_v2,SSLClassifierHead
 from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
 random.seed(42); os.environ["PYTHONHASHSEED"]="42"; np.random.seed(42); torch.manual_seed(42); torch.cuda.manual_seed_all(42)
@@ -49,20 +49,20 @@ def make_dataloaders_ssl(batch_size: int = 16, preprocess_config: Optional[Prepr
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=7,
+        num_workers=0,
         drop_last=True,  # Important for contrastive learning
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=False,   # if num_workers > 0, set to True
     )
 
     val_loader = DataLoader(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=7,
+        num_workers=0,
         drop_last=False,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=False,   # if num_workers > 0, set to True
     )
 
     return train_loader, val_loader
@@ -116,14 +116,13 @@ def global_contrastive_loss(z_a, z_b, temperature=0.07):
 
 
 def train_ssl_epochtransformer(
-    num_epochs: int = 100,
-    batch_size: int = 64,
-    lr: float = 1e-3,
+    num_epochs: int = 200,
+    batch_size: int = 128,
+    lr: float = 1e-4,
     experiment_name: str = "ssl_transformer_v1",
     model_kwargs: dict | None = None,
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
-    use_conv1d: bool = True,
     temperature: float = 0.07,          
     lambda_token: float = 1.0,          
     lambda_global: float = 1.0,       
@@ -179,23 +178,20 @@ def train_ssl_epochtransformer(
         dim_feedforward=512,
         dropout=0.2,
         num_classes=5,  # ignored in SSL
-        max_tokens=512,     # when changing to SSLEpochTransformerConv1D_v2 this should be target_tokens = 480
+        target_tokens=240,     
     )
 
     if model_kwargs:
         default_model_cfg.update(model_kwargs)
 
-    assert use_conv1d, "Currently only Conv1D patch embedding is supported for SSL"
-
     # create two models: one for headband (2 channels), one for PSG (6 channels)
     model_hb_cfg = default_model_cfg.copy()
     model_hb_cfg['input_channels'] = 2  # Headband
-    model_hb = SSLEpochTransformerConv1D(**model_hb_cfg).to(device)
+    model_hb = SSLEpochTransformerConv1D_v2(**model_hb_cfg).to(device)
     
     model_psg_cfg = default_model_cfg.copy()
     model_psg_cfg['input_channels'] = 6  # PSG
-    model_psg = SSLEpochTransformerConv1D(**model_psg_cfg).to(device)
-
+    model_psg = SSLEpochTransformerConv1D_v2(**model_psg_cfg).to(device)
     num_params_hb = sum(p.numel() for p in model_hb.parameters() if p.requires_grad)
     num_params_psg = sum(p.numel() for p in model_psg.parameters() if p.requires_grad)
     print(f"Headband encoder: {num_params_hb:,} parameters")
@@ -370,7 +366,7 @@ def train_ssl_epochtransformer(
                 'preprocessing': preprocess_config.to_dict(),
                 'training_config': training_config,
             }, checkpoint_file)
-            print(f"✓ Saved best model (val loss: {avg_val_loss:.4f})")
+            print(f" Saved best model (val loss: {avg_val_loss:.4f})")
         else:
             epochs_since_improvement += 1
             print(f"No improvement in val loss for {epochs_since_improvement} epoch(s).")
@@ -405,7 +401,7 @@ def train_ssl_epochtransformer(
     return model_hb, model_psg
 
 
-
+### forget about this function for now ###
 def fine_tune_ssl_encoder(
         encoder_checkpoint_path: Path,
         num_epochs: int = 50,
@@ -446,7 +442,7 @@ def fine_tune_ssl_encoder(
     ssl_checkpoint = torch.load(encoder_checkpoint_path, map_location='cpu')
 
     encoder_hb_cfg = ssl_checkpoint['hyperparameters_hb']
-    encoder = SSLEpochTransformerConv1D(**encoder_hb_cfg).to(device)
+    encoder = SSLEpochTransformerConv1D_v2(**encoder_hb_cfg).to(device)
     encoder.load_state_dict(ssl_checkpoint['encoder_hb_state_dict'])
     print(f"✓ Loaded encoder from epoch {ssl_checkpoint['epoch'] + 1}")
 
@@ -753,20 +749,20 @@ if __name__ == "__main__":
     USE_CACHE = True
     
     # SSL Pre-training settings (used if MODE == "pretrain")
-    SSL_NUM_EPOCHS = 100
-    SSL_BATCH_SIZE = 64
-    SSL_LEARNING_RATE = 1e-3
+    SSL_NUM_EPOCHS = 200
+    SSL_BATCH_SIZE = 128
+    SSL_LEARNING_RATE = 1e-4
     SSL_TEMPERATURE = 0.07
     SSL_LAMBDA_TOKEN = 1.0
     SSL_LAMBDA_GLOBAL = 1.0
     
     SSL_MODEL_CONFIG = {
         'd_model': 128,
-        'nhead': 8,
-        'num_layers': 6,
+        'nhead': 4,
+        'num_layers': 3,
         'dim_feedforward': 512,
         'dropout': 0.2,
-        'max_tokens': 512   # when changing to SSLEpochTransformerConv1D_v2 this should be target_tokens = 480
+        'target_tokens': 240   # when changing to SSLEpochTransformerConv1D_v2 this should be target_tokens = 240
     }
     
     # Fine-tuning settings (used if MODE == "finetune"), manually write the correct checkpoint name from the SSL pre-training run
@@ -799,13 +795,12 @@ if __name__ == "__main__":
             model_kwargs=SSL_MODEL_CONFIG,
             preprocess_config=preproc_cfg,
             use_cache=USE_CACHE,
-            use_conv1d=True,
             temperature=SSL_TEMPERATURE,
             lambda_token=SSL_LAMBDA_TOKEN,
             lambda_global=SSL_LAMBDA_GLOBAL,
         )
         
-        print(f"\n✓ SSL pre-training complete!")
+        print(f"\n SSL pre-training complete!")
         print(f"  Checkpoint: {CHECKPOINT_DIR / experiment_name / 'best_model.pt'}")
         print(f"\nTo fine-tune, change MODE to 'finetune' and set:")
         print(f"  SSL_CHECKPOINT_NAME = '{experiment_name}'")

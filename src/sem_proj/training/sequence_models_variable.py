@@ -410,7 +410,7 @@ def train_variable_gru(
         class_weights = np.sqrt(class_weights)  # Square root smoothing
         class_weights = torch.tensor(class_weights, dtype=torch.float32, device=device)
         
-        print(f"Class weights (with √ smoothing): {class_weights.cpu().numpy()}")
+        print(f"Class weights (with sqrt smoothing): {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=-100)
     else:
         criterion = nn.CrossEntropyLoss(ignore_index=-100)

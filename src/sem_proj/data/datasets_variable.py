@@ -38,6 +38,7 @@ N_PSG_CHANNELS = 6
 class BoasVariableLengthSequenceDataset(Dataset):
     """
     Variable-length sequence dataset for BOAS.
+    USED IT FOR THE FINAL MODEL, CHANGED FROM FIXED LENGTH TO NOW VARIABLE LENGTH
     
     Extracts consecutive valid epochs (labels 0-4) until encountering:
     - Headband: AI artifact (label -2)

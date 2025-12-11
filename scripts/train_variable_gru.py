@@ -53,7 +53,7 @@ def main():
     # Train variable-length GRU
     best_f1 = train_variable_gru(
         # Training params
-        num_epochs=50,
+        num_epochs=100,
         batch_size=4,                    # Small batch for variable-length
         min_seq_len=5,                   # Minimum sequence length
         lr_encoder=1e-5,                 # Low LR if fine-tuning encoder

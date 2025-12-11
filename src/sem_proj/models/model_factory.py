@@ -1169,6 +1169,115 @@ class SSLEpochTransformerConv1D(nn.Module):
 
         # return whole transformer output for SSL purposes
         return x
+    
+
+
+class SSLEpochTransformerConv1D_v2(nn.Module):
+    """
+    Just a copy of SL version, but no classification head (returning the full transformer output).
+    2 options for tokenization (target tokens = 480 or 240).
+    """
+    def __init__(
+        self,
+        input_channels=2,
+        seq_length=7680,
+        d_model=64,
+        nhead=8,
+        num_layers=4,
+        dim_feedforward=256,
+        dropout=0.1,
+        num_classes=5,
+        target_tokens: int = 240,   # 480 or 240
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.original_seq_length = seq_length
+        self.target_tokens = target_tokens
+        assert target_tokens in {480, 240}, "target_tokens must be 480 or 240"
+        if target_tokens == 480:
+            self.tokenization = nn.Sequential(
+                nn.Conv1d(in_channels=input_channels,
+                        out_channels=32,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(32),
+                nn.GELU(),
+                nn.Conv1d(in_channels=32,
+                        out_channels=64,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Conv1d(in_channels=64,
+                        out_channels=128,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Conv1d(in_channels=128,
+                        out_channels=d_model,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0),
+            )
+        else:  # target_tokens == 240
+            self.tokenization = nn.Sequential(
+                nn.Conv1d(in_channels=input_channels,
+                        out_channels=32,
+                        kernel_size=5,
+                        stride=4,       # only change (faster reduction)
+                        padding=2),
+                nn.BatchNorm1d(32),
+                nn.GELU(),
+                nn.Conv1d(in_channels=32,
+                        out_channels=64,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(64),
+                nn.GELU(),
+                nn.Conv1d(in_channels=64,
+                        out_channels=128,
+                        kernel_size=5,
+                        stride=2,
+                        padding=2),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Conv1d(in_channels=128,
+                        out_channels=d_model,
+                        kernel_size=1,
+                        stride=1,
+                        padding=0),
+            )
+        self.pos_embedding = nn.Parameter(torch.randn(1, target_tokens, d_model))   # no CLS for now
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True  # Important: expects (batch, seq, feature)
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+    
+    def forward(self, x, return_mean_embedding=False):
+        x = self.tokenization(x)  # (batch, d_model, target_tokens)
+        x = x.transpose(1, 2)   # (batch, target_tokens, d_model)
+        x = x + self.pos_embedding
+        x = self.transformer_encoder(x)  # (batch, target_tokens, d_model)
+        mean = x.mean(dim=1)  # mean pooling over tokens, no CLS for now
+        if return_mean_embedding:
+            return mean  # (batch, d_model), never happens in SSL
+        # return whole transformer output for SSL purposes
+        return x  # (batch, target_tokens, d_model)
+
+
+
 
 class SSLClassifierHead(nn.Module):
     """

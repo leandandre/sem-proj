@@ -340,6 +340,7 @@ class BoasSequenceDataset(Dataset):
     
     Returns sequences of consecutive epochs from the same recording (subject/night).
     Sequences never cross recording boundaries to maintain causality for real-time application.
+    USED IT FOR MODEL FINDING, CHANGED TO VARIABLE SEQUENCE LENGTH LATER FOR THE FINAL MODEL
     
     Returns:
         - x_seq: (seq_len, C, T) for single modality or (seq_len, 1, C, T) if add_channel_dim=True
