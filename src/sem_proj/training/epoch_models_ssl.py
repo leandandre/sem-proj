@@ -750,7 +750,7 @@ if __name__ == "__main__":
     
     # SSL Pre-training settings (used if MODE == "pretrain")
     SSL_NUM_EPOCHS = 200
-    SSL_BATCH_SIZE = 128
+    SSL_BATCH_SIZE = 96
     SSL_LEARNING_RATE = 1e-4
     SSL_TEMPERATURE = 0.07
     SSL_LAMBDA_TOKEN = 1.0

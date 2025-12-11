@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 from tqdm.auto import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
@@ -152,6 +153,11 @@ def evaluate_variable_model(model, dataloader, criterion, device, mode="headband
                 
                 # Forward pass
                 logits = model(x_batch, lengths)  # (B, L_max, num_classes)
+
+                ### use mixed precision evaluation ###
+                with autocast():
+                    logits = model(x_batch, lengths)  # (B, L_max, num_classes)
+                ########
                 
             else:  # cross mode
                 x_hb, x_psg, y_batch, lengths = batch
@@ -445,6 +451,10 @@ def train_variable_gru(
         optimizer, mode='max', factor=0.5, patience=5, verbose=True
     )
     
+    ### use mixed precision training ###
+    scaler = GradScaler()   # for mixed precision training
+    ######
+
     # Training loop
     class_names = ['Wake', 'N1', 'N2', 'N3', 'REM']
     best_val_f1 = 0.0
@@ -470,24 +480,46 @@ def train_variable_gru(
             else:
                 raise NotImplementedError("Cross mode not implemented")
             
+            # optimizer.zero_grad()
+            
+            # # Forward
+            # logits = model(x_batch, lengths)  # (B, L_max, num_classes)
+            
+            # # Compute loss
+            # logits_flat = logits.view(-1, logits.size(-1))
+            # y_flat = y_batch.view(-1)
+            # loss = criterion(logits_flat, y_flat)
+            
+            # # Backward
+            # loss.backward()
+            
+            # # Gradient clipping
+            # if gradient_clip > 0:
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+            
+            # optimizer.step()
+
+
+            ### use mixed precision training instead ###
             optimizer.zero_grad()
-            
-            # Forward
-            logits = model(x_batch, lengths)  # (B, L_max, num_classes)
-            
-            # Compute loss
-            logits_flat = logits.view(-1, logits.size(-1))
-            y_flat = y_batch.view(-1)
-            loss = criterion(logits_flat, y_flat)
-            
-            # Backward
-            loss.backward()
-            
-            # Gradient clipping
+            # Forward with mixed precision
+            with autocast():
+                logits = model(x_batch, lengths)  # (B, L_max, num_classes)
+                
+                # Compute loss
+                logits_flat = logits.view(-1, logits.size(-1))
+                y_flat = y_batch.view(-1)
+                loss = criterion(logits_flat, y_flat)
+            # Backward with gradient scaling
+            scaler.scale(loss).backward()
+            # Gradient clipping (unscale first)
             if gradient_clip > 0:
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
-            
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
+            ########
+
             
             # Metrics
             train_loss += loss.item() * x_batch.size(0)
@@ -581,7 +613,7 @@ if __name__ == "__main__":
     )
     
     train_variable_gru(
-        num_epochs=50,
+        num_epochs=100,
         batch_size=4,
         min_seq_len=5,
         lr_encoder=1e-5,

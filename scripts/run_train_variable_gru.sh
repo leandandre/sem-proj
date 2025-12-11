@@ -21,6 +21,8 @@ echo "Current dir: $(pwd)"
 # 3) Go to project root
 cd /cluster/work/smslab/2025-eeg_headband/sem-proj
 
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # 4) GPU info
 nvidia-smi
 
