@@ -164,12 +164,24 @@ def evaluate_variable_model(model, dataloader, criterion, device, mode="headband
                 # For cross mode, you'd need to modify model to handle both inputs
                 raise NotImplementedError("Cross mode not yet implemented for variable-length")
             
-            # Flatten for loss computation
-            logits_flat = logits.view(-1, logits.size(-1))  # (B*L_max, num_classes)
-            y_flat = y_batch.view(-1)  # (B*L_max,)
+            # # Flatten for loss computation
+            # logits_flat = logits.view(-1, logits.size(-1))  # (B*L_max, num_classes)
+            # y_flat = y_batch.view(-1)  # (B*L_max,)
             
-            # Compute loss (CrossEntropyLoss automatically ignores -100)
-            loss = criterion(logits_flat, y_flat)
+            # # Compute loss (CrossEntropyLoss automatically ignores -100)
+            # loss = criterion(logits_flat, y_flat)
+
+
+            ### use mixed precision evaluation instead ###
+            with autocast():
+                # Flatten for loss computation
+                logits_flat = logits.view(-1, logits.size(-1))  # (B*L_max, num_classes)
+                y_flat = y_batch.view(-1)  # (B*L_max,)
+                # Compute loss (CrossEntropyLoss automatically ignores -100)
+                loss = criterion(logits_flat, y_flat)
+            ########
+
+
             total_loss += loss.item() * x_batch.size(0)
             
             # Get predictions
