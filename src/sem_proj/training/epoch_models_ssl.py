@@ -288,26 +288,30 @@ def train_ssl_epochtransformer(
             batch_size_actual = x_hb.size(0)
             train_loss += loss.item() * batch_size_actual
             train_loss_token += loss_token.item() * batch_size_actual
-            train_loss_global += loss_global.item() * batch_size_actual
+            # train_loss_global += loss_global.item() * batch_size_actual
             train_samples += batch_size_actual
             
             writer.add_scalar('Loss/train_batch', loss.item(), global_step)
             writer.add_scalar('Loss/train_token', loss_token.item(), global_step)
-            writer.add_scalar('Loss/train_global', loss_global.item(), global_step)
+            # writer.add_scalar('Loss/train_global', loss_global.item(), global_step)
             
             train_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
             global_step += 1
         
         avg_train_loss = train_loss / train_samples
         avg_train_loss_token = train_loss_token / train_samples
-        avg_train_loss_global = train_loss_global / train_samples
+        # avg_train_loss_global = train_loss_global / train_samples
         
+        # print(f"Train Loss: {avg_train_loss:.4f} "
+        #       f"(token: {avg_train_loss_token:.4f}, global: {avg_train_loss_global:.4f})")
+        
+        # only token-level for now
         print(f"Train Loss: {avg_train_loss:.4f} "
-              f"(token: {avg_train_loss_token:.4f}, global: {avg_train_loss_global:.4f})")
+              f"(token: {avg_train_loss_token:.4f})")
         
         writer.add_scalar('Loss/train_epoch', avg_train_loss, epoch)
         writer.add_scalar('Loss/train_epoch_token', avg_train_loss_token, epoch)
-        writer.add_scalar('Loss/train_epoch_global', avg_train_loss_global, epoch)
+        # writer.add_scalar('Loss/train_epoch_global', avg_train_loss_global, epoch)
 
         # === VALIDATION ===
         model_hb.eval()
@@ -329,24 +333,30 @@ def train_ssl_epochtransformer(
                 z_psg = tokens_psg.mean(dim=1)
                 
                 loss_token = token_contrastive_loss(tokens_hb, tokens_psg, temperature=temperature)
-                loss_global = global_contrastive_loss(z_hb, z_psg, temperature=temperature)
-                loss = lambda_token * loss_token + lambda_global * loss_global
+                # loss_global = global_contrastive_loss(z_hb, z_psg, temperature=temperature)
+                # loss = lambda_token * loss_token + lambda_global * loss_global
+
+                loss = loss_token  # only token-level loss for now
                 
                 val_loss += loss.item() * x_hb.size(0)
                 val_loss_token += loss_token.item() * x_hb.size(0)
-                val_loss_global += loss_global.item() * x_hb.size(0)
+                # val_loss_global += loss_global.item() * x_hb.size(0)
                 val_samples += x_hb.size(0)
 
         avg_val_loss = val_loss / val_samples
         avg_val_loss_token = val_loss_token / val_samples
-        avg_val_loss_global = val_loss_global / val_samples
+        # avg_val_loss_global = val_loss_global / val_samples
         
+        # print(f"Val Loss: {avg_val_loss:.4f} "
+        #       f"(token: {avg_val_loss_token:.4f}, global: {avg_val_loss_global:.4f})")
+        
+        # only token-level for now
         print(f"Val Loss: {avg_val_loss:.4f} "
-              f"(token: {avg_val_loss_token:.4f}, global: {avg_val_loss_global:.4f})")
+              f"(token: {avg_val_loss_token:.4f})")
         
         writer.add_scalar('Loss/val_epoch', avg_val_loss, epoch)
         writer.add_scalar('Loss/val_epoch_token', avg_val_loss_token, epoch)
-        writer.add_scalar('Loss/val_epoch_global', avg_val_loss_global, epoch)
+        # writer.add_scalar('Loss/val_epoch_global', avg_val_loss_global, epoch)
         
         current_lr = optimizer.param_groups[0]['lr']
         writer.add_scalar('Learning_Rate', current_lr, epoch)
@@ -366,7 +376,7 @@ def train_ssl_epochtransformer(
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': avg_val_loss,
                 'val_loss_token': avg_val_loss_token,
-                'val_loss_global': avg_val_loss_global,
+                # 'val_loss_global': avg_val_loss_global,
                 'hyperparameters_hb': model_hb_cfg,
                 'hyperparameters_psg': model_psg_cfg,
                 'preprocessing': preprocess_config.to_dict(),
@@ -390,7 +400,7 @@ def train_ssl_epochtransformer(
             'optimizer_state_dict': optimizer.state_dict(),
             'val_loss': avg_val_loss,
             'val_loss_token': avg_val_loss_token,
-            'val_loss_global': avg_val_loss_global,
+            # 'val_loss_global': avg_val_loss_global,
             'hyperparameters_hb': model_hb_cfg,
             'hyperparameters_psg': model_psg_cfg,
             'preprocessing': preprocess_config.to_dict(),
@@ -752,7 +762,7 @@ if __name__ == "__main__":
     USE_CACHE = True
     
     # SSL Pre-training settings (used if MODE == "pretrain")
-    SSL_NUM_EPOCHS = 200
+    SSL_NUM_EPOCHS = 250
     SSL_BATCH_SIZE = 96
     SSL_LEARNING_RATE = 1e-4
     SSL_TEMPERATURE = 0.07
@@ -769,7 +779,7 @@ if __name__ == "__main__":
     }
     
     # Fine-tuning settings (used if MODE == "finetune"), manually write the correct checkpoint name from the SSL pre-training run
-    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v1"  # Name of SSL experiment
+    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v2"  # Name of SSL experiment
     
     FINETUNE_NUM_EPOCHS = 50
     FINETUNE_BATCH_SIZE = 128

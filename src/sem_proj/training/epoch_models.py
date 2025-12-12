@@ -246,7 +246,7 @@ def train_epochtransformer(
     # Choose model architecture
     if method == "conv_transformer":
         model = EpochTransformerConv1D_v2(**default_model_cfg).to(device)
-        print("Using Conv1D patch embedding")
+        print("Using EpochTransformerConv1D_v2 model")
     elif method == "mean_pool_transformer":
         model = EpochTransformer(**default_model_cfg).to(device)
         print("Using mean-pooling patch embedding")
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     METHOD = 'conv_transformer'  # select {'conv_transformer', 'mean_pool_transformer', 'multichannel_sleepnet'}
     USE_AUGMENTATION = True  # Set to True to use data augmentation
     
-    D_MODEL = 96  # 64, 96, 128
+    D_MODEL = 160  # 64, 96, 128
     N_HEAD = 4     # 4 or 8 heads
     NUM_LAYERS = 2
     DIM_FEEDFORWARD = D_MODEL * 4   # always d_model * 4
@@ -502,7 +502,7 @@ if __name__ == "__main__":
     }
     
     # Generate experiment name based on config
-    VERSION = 4     # CHANGE for each new run
+    VERSION = 8     # CHANGE for each new run
     model_type = METHOD
     experiment_name = f"epochlevel_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
