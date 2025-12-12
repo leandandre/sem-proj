@@ -95,13 +95,17 @@ def token_contrastive_loss(hb_tokens: torch.Tensor, psg_tokens: torch.Tensor, te
 
     # hb to psg
     loss_hb2psg = F.cross_entropy(logits, labels)
+    return loss_hb2psg
 
+    ### don't use symmetric loss for token-level for now ###
     # psg to hb
     loss_psg2hb = F.cross_entropy(logits.T, labels)
 
     # final symmetric loss
     loss = 0.5 * (loss_hb2psg + loss_psg2hb)
     return loss
+
+
 
 def global_contrastive_loss(z_a, z_b, temperature=0.07):
     # z_a, z_b: (B, D)
@@ -269,8 +273,10 @@ def train_ssl_epochtransformer(
             
             # Compute contrastive loss
             loss_token = token_contrastive_loss(tokens_hb, tokens_psg, temperature)
-            loss_global = global_contrastive_loss(z_hb, z_psg, temperature)
-            loss = lambda_token * loss_token + lambda_global * loss_global
+            # loss_global = global_contrastive_loss(z_hb, z_psg, temperature)
+            # loss = lambda_token * loss_token + lambda_global * loss_global
+
+            loss = loss_token  # only token-level loss for now
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
@@ -738,9 +744,6 @@ def fine_tune_ssl_encoder(
 
 
 if __name__ == "__main__":
-
-    ### in main & in the two SSL training functions, things have to be adjusted when using the final encoder model!! ###
-    ### for example, no max_token parameter but target_tokens, ... ###
 
     MODE = "pretrain"  # "pretrain" or "finetune"
     

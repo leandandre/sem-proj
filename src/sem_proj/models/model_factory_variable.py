@@ -94,15 +94,31 @@ class SequenceGRUClassifier_Variable(nn.Module):
         """
         B, L_max, C, T = x.shape
         
-        # 1) Encode all epochs (including padding - will be masked later)
-        x_flat = x.view(B * L_max, C, T)  # (B*L_max, C, T)
-        
-        with torch.set_grad_enabled(self.training):
-            # Get epoch embeddings
-            emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)  # (B*L_max, d_model)
-        
-        # 2) Reshape to sequence form
-        emb_seq = emb_flat.view(B, L_max, -1)  # (B, L_max, d_model)
+        # 1) Encode only valid epochs (not padding) to avoid corrupting BatchNorm statistics
+        if lengths is not None:
+            # Create mask for valid positions
+            valid_mask = torch.arange(L_max, device=x.device)[None, :] < lengths[:, None]  # (B, L_max)
+            valid_mask_flat = valid_mask.view(-1)  # (B*L_max,)
+            
+            # Only encode valid epochs
+            x_flat = x.view(B * L_max, C, T)
+            x_valid = x_flat[valid_mask_flat]  # (N_valid, C, T)
+            
+            with torch.set_grad_enabled(self.training):
+                emb_valid = self.epoch_model(x_valid, return_mean_embedding=True)  # (N_valid, d_model)
+            
+            # Scatter back to padded format
+            emb_seq = torch.zeros(B * L_max, self.input_dim, device=x.device, dtype=emb_valid.dtype)
+            emb_seq[valid_mask_flat] = emb_valid
+            emb_seq = emb_seq.view(B, L_max, -1)  # (B, L_max, d_model)
+        else:
+            # No padding - process all epochs normally
+            x_flat = x.view(B * L_max, C, T)
+            
+            with torch.set_grad_enabled(self.training):
+                emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)  # (B*L_max, d_model)
+            
+            emb_seq = emb_flat.view(B, L_max, -1)  # (B, L_max, d_model)
         
         # 3) Pack sequences for efficient GRU processing
         if lengths is not None:
@@ -234,10 +250,27 @@ class SequenceGRUClassifier_VariableWithAttention(nn.Module):
         """
         B, L_max, C, T = x.shape
         
-        # 1) Encode epochs
-        x_flat = x.view(B * L_max, C, T)
-        emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)
-        emb_seq = emb_flat.view(B, L_max, -1)
+        # 1) Encode only valid epochs (not padding) to avoid corrupting BatchNorm statistics
+        if lengths is not None:
+            # Create mask for valid positions
+            valid_mask = torch.arange(L_max, device=x.device)[None, :] < lengths[:, None]  # (B, L_max)
+            valid_mask_flat = valid_mask.view(-1)  # (B*L_max,)
+            
+            # Only encode valid epochs
+            x_flat = x.view(B * L_max, C, T)
+            x_valid = x_flat[valid_mask_flat]  # (N_valid, C, T)
+            
+            emb_valid = self.epoch_model(x_valid, return_mean_embedding=True)  # (N_valid, d_model)
+            
+            # Scatter back to padded format
+            emb_seq = torch.zeros(B * L_max, self.epoch_model.d_model, device=x.device, dtype=emb_valid.dtype)
+            emb_seq[valid_mask_flat] = emb_valid
+            emb_seq = emb_seq.view(B, L_max, -1)  # (B, L_max, d_model)
+        else:
+            # No padding - process all epochs normally
+            x_flat = x.view(B * L_max, C, T)
+            emb_flat = self.epoch_model(x_flat, return_mean_embedding=True)
+            emb_seq = emb_flat.view(B, L_max, -1)
         
         # 2) GRU processing
         if lengths is not None:

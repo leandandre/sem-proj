@@ -642,10 +642,10 @@ if __name__ == "__main__":
     CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
     
     # Training hyperparameters
-    NUM_EPOCHS = 50
+    NUM_EPOCHS = 100
     BATCH_SIZE = 8          # Smaller because sequences use more memory
     SEQ_LEN = 20            # 20 consecutive epochs = 10 minutes
-    STRIDE = 1              # determines overlap between sequences
+    STRIDE = 5              # determines overlap between sequences
     LEARNING_RATE = 1e-4    # Lower LR for sequence models
     USE_CACHE = True
     WEIGHTED_LOSS = False
@@ -666,7 +666,7 @@ if __name__ == "__main__":
     # GRU hyperparameters (for sequence modeling)
     GRU_HIDDEN = 128
     GRU_LAYERS = 1
-    GRU_BIDIRECTIONAL = True
+    GRU_BIDIRECTIONAL = False
     
     # Transformer hyperparameters (only used if USE_TRANSFORMER=True)
     D_MODEL_SEQ = 96

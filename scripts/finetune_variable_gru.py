@@ -133,7 +133,7 @@ def run_stage1_hyperparameter_tuning(
     print(f"\nSampled training subjects: {sampled_train[:5]}..." if len(sampled_train) > 5 else f"\nSampled training subjects: {sampled_train}")
     print()
     
-    # Load preprocessing config
+    # Load preprocessing config (always this one since it showed best results)
     config = PreprocessingConfig.from_yaml(
         CONFIG_DIR / "notch_bandpass_resample_znorm.yaml"
     )
@@ -358,11 +358,7 @@ def main():
     NUM_EPOCHS = 100
     BATCH_SIZE = 1
     LR_GRU = 1e-4
-    
-    # ========================================================================
-    # RUN EXPERIMENTS
-    # ========================================================================
-    
+        
     print("\n" + "="*80)
     print("FINE-TUNING WITH CONTROLLED LABELED DATA FRACTIONS")
     print("="*80)
@@ -375,11 +371,9 @@ def main():
     print(f"  Learning rate: {LR_GRU}")
     print("="*80)
     
-    # ========================================================================
-    # STAGE 1: HYPERPARAMETER TUNING
-    # ========================================================================
+
     # Uncomment to run Stage 1
-    
+
     stage1_f1 = run_stage1_hyperparameter_tuning(
         fraction=FRACTION,
         seed=SEED,
@@ -390,11 +384,9 @@ def main():
         experiment_name=f"finetune_stage1_p{FRACTION}",
     )
     
-    # ========================================================================
-    # STAGE 2: FINAL EVALUATION
-    # ========================================================================
+
     # Uncomment to run Stage 2 (after completing Stage 1 and tuning hyperparameters)
-    
+
     # stage2_f1 = run_stage2_final_evaluation(
     #     fraction=FRACTION,
     #     seed=SEED,
@@ -404,11 +396,7 @@ def main():
     #     lr_gru=LR_GRU,
     #     experiment_name=f"finetune_stage2_p{FRACTION}",
     # )
-    
-    # ========================================================================
-    # SUMMARY
-    # ========================================================================
-    
+        
     print("\n" + "="*80)
     print("FINE-TUNING COMPLETE")
     print("="*80)
