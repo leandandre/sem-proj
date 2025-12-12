@@ -14,15 +14,7 @@ This script implements a two-stage fine-tuning strategy:
     - Train on fraction p of (train_subjects + val_subjects)
     - Test on full test_subjects
     - Purpose: Final model evaluation using all available training data
-    
-This approach allows us to study:
-1. How much labeled data is needed for effective fine-tuning
-2. Transfer learning efficiency from SSL pretrained models
-3. Performance vs. labeled data fraction curves
-
-Usage:
-    python scripts/finetune_variable_gru.py
-    
+        
 Example workflow:
     - Set fraction = 0.1 (10% of labeled data)
     - Run Stage 1 to tune hyperparameters
