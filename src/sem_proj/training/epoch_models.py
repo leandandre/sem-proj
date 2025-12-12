@@ -25,7 +25,7 @@ CONFIG_DIR = PROJECT_ROOT / "configs" / "preprocess"
 
 # Utility function to compute class weights to handle class imbalance
 def compute_class_weights(dataloader, num_classes=5):
-    """Compute inverse frequency class weights."""
+    """Compute inverse frequency class weights with square root smoothing."""
     from collections import Counter
     
     all_labels = []
@@ -35,11 +35,12 @@ def compute_class_weights(dataloader, num_classes=5):
     counter = Counter(all_labels)
     total = len(all_labels)
     
-    # Inverse frequency weights
+    # Inverse frequency weights with square root smoothing
     weights = []
     for class_idx in range(num_classes):
         count = counter.get(class_idx, 1)  # Avoid division by zero
         weight = total / (num_classes * count)
+        weight = weight ** 0.5  # Apply square root smoothing
         weights.append(weight)
     
     return torch.tensor(weights, dtype=torch.float32)
@@ -276,8 +277,8 @@ def train_epochtransformer(
         print(f"\nClass weights: {class_weights.cpu().numpy()}")
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     else: # manual weights or unweighted
-        manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device)
-        # manual_weights = torch.tensor([1., 1., 1., 1., 1.], dtype=torch.float32, device=device)
+        # manual_weights = torch.tensor([0.7, 2.5, 0.35, 2.0, 0.7], dtype=torch.float32, device=device)
+        manual_weights = torch.tensor([1., 1., 1., 1., 1.], dtype=torch.float32, device=device)
         manual_weights = manual_weights * (manual_weights.numel() / manual_weights.sum())  # normalize to mean = 1.0
         criterion = nn.CrossEntropyLoss(weight=manual_weights, label_smoothing=0.0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
@@ -456,11 +457,11 @@ def train_epochtransformer(
 
 if __name__ == "__main__":
     # Configuration
-    # CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
+    CONFIG_NAME = "notch_bandpass_resample_znorm"  # Full preprocessing
     # CONFIG_NAME = "no_preprocess"                  # No preprocessing
     # CONFIG_NAME = "notch_bandpass"                 # Just filters
     # CONFIG_NAME = "notch_bandpass_znorm"           # Filters + znorm
-    CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample, use this when using MultiChannelSleepNet!
+    # CONFIG_NAME = "notch_bandpass_resample"        # Filters + resample, use this when using MultiChannelSleepNet!
     # CONFIG_NAME = "only_znorm"                     # Just normalization
     
     # Training hyperparameters
@@ -469,8 +470,8 @@ if __name__ == "__main__":
     LEARNING_RATE = 5e-4    # try 1e-3, 2e-3, 5e-4, depending on model size
     USE_CACHE = True    # Set to False to disable caching
 
-    WEIGHTED_LOSS = False  # Set to True to use class-balanced loss
-    METHOD = 'multichannel_sleepnet'  # select {'conv_transformer', 'mean_pool_transformer', 'multichannel_sleepnet'}
+    WEIGHTED_LOSS = True  # Set to True to use class-balanced loss (sqrt smoothing)
+    METHOD = 'conv_transformer'  # select {'conv_transformer', 'mean_pool_transformer', 'multichannel_sleepnet'}
     USE_AUGMENTATION = True  # Set to True to use data augmentation
     
     D_MODEL = 96  # 64, 96, 128
@@ -501,8 +502,8 @@ if __name__ == "__main__":
     }
     
     # Generate experiment name based on config
-    VERSION = 3     # CHANGE for each new run
-    model_type = METHOD + '_v2'
+    VERSION = 4     # CHANGE for each new run
+    model_type = METHOD
     experiment_name = f"epochlevel_{model_type}_{CONFIG_NAME}_v{VERSION}"
     
     print(f"\n Starting training with {model_type} model")
