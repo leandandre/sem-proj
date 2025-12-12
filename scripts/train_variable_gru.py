@@ -1,5 +1,7 @@
 """
 Entry point script for training variable-length GRU sequence classifier.
+TRAINING ON FULL TRAINING SET. DID NOT REALLY USE THAT SCRIPT.
+finetune_variable_gru.py HANDLES THE ALL CASES (also fraction=1.0).
 
 This script implements:
 - Extract sequences from continuous recordings until artifact/disconnection

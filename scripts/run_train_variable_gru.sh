@@ -27,4 +27,4 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 nvidia-smi
 
 # 5) Run your training script
-python -u scripts/train_variable_gru.py
+python -u scripts/finetune_variable_gru.py

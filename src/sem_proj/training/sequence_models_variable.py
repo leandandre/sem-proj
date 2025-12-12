@@ -45,6 +45,8 @@ def make_variable_dataloaders(
     preprocess_config: Optional[PreprocessingConfig] = None,
     use_cache: bool = True,
     use_augmentation: bool = False,
+    train_subjects: Optional[list] = None,
+    val_subjects: Optional[list] = None,
 ):
     """
     Create dataloaders for variable-length sequences.
@@ -63,13 +65,18 @@ def make_variable_dataloaders(
         Whether to use cached data.
     use_augmentation : bool
         Whether to apply augmentation (typically False for variable-length).
+    train_subjects : list, optional
+        List of training subject IDs. If None, uses get_train_subjects().
+    val_subjects : list, optional
+        List of validation subject IDs. If None, uses get_val_subjects().
     
     Returns
     -------
     train_loader, val_loader : DataLoader
     """
-    tr_subs = get_train_subjects()
-    val_subs = get_val_subjects()
+    # Use provided subjects or default to standard splits
+    tr_subs = train_subjects if train_subjects is not None else get_train_subjects()
+    val_subs = val_subjects if val_subjects is not None else get_val_subjects()
     
     # Augmentation not recommended for variable-length (disrupts natural boundaries)
     train_transform = None
@@ -243,6 +250,9 @@ def train_variable_gru(
     gradient_clip: float = 5.0,
     early_stopping_patience: int = 10,
     num_classes: int = 5,
+    # Data split params
+    train_subjects: Optional[list] = None,
+    val_subjects: Optional[list] = None,
 ):
     """
     Train variable-length GRU sequence classifier.
@@ -288,6 +298,10 @@ def train_variable_gru(
         Gradient clipping max norm.
     early_stopping_patience : int
         Early stopping patience.
+    train_subjects : list, optional
+        List of training subject IDs. If None, uses get_train_subjects().
+    val_subjects : list, optional
+        List of validation subject IDs. If None, uses get_val_subjects().
     """
     checkpoint_path = CHECKPOINT_DIR / experiment_name
     log_path = LOG_DIR / experiment_name
@@ -336,6 +350,8 @@ def train_variable_gru(
         mode=mode,
         preprocess_config=preprocess_config,
         use_cache=use_cache,
+        train_subjects=train_subjects,
+        val_subjects=val_subjects,
     )
     
     print(f"Training sequences: {len(train_loader.dataset)}")
