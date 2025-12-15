@@ -29,7 +29,7 @@ torch.cuda.manual_seed_all(42)
 from sem_proj.data.datasets_variable import BoasVariableLengthSequenceDataset, variable_length_collate_fn
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
-from sem_proj.models.model_factory import EpochTransformerConv1D_v2
+from sem_proj.models.model_factory import SSLEpochTransformerConv1D_v2
 from sem_proj.models.model_factory_variable import SequenceGRUClassifier_Variable, SequenceGRUClassifier_VariableWithAttention
 
 # Project paths
@@ -360,7 +360,7 @@ def train_variable_gru(
     # Build epoch encoder
     input_channels = 2 if mode == "headband" else 6
     
-    epoch_model = EpochTransformerConv1D_v2(
+    epoch_model = SSLEpochTransformerConv1D_v2(
         input_channels=input_channels,
         seq_length=seq_length,
         d_model=d_model,

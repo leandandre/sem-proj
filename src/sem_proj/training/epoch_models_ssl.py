@@ -44,7 +44,7 @@ def make_dataloaders_ssl(batch_size: int = 16, preprocess_config: Optional[Prepr
         preprocess_config=preprocess_config,
         use_cache=use_cache
     )
-
+    
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
@@ -64,7 +64,7 @@ def make_dataloaders_ssl(batch_size: int = 16, preprocess_config: Optional[Prepr
         pin_memory=True,
         persistent_workers=False,   # if num_workers > 0, set to True
     )
-
+    # return train_ds, val_ds
     return train_loader, val_loader
 
 def token_contrastive_loss(hb_tokens: torch.Tensor, psg_tokens: torch.Tensor, temperature: float = 0.07) -> torch.Tensor:
@@ -120,8 +120,8 @@ def global_contrastive_loss(z_a, z_b, temperature=0.07):
 
 
 def train_ssl_epochtransformer(
-    num_epochs: int = 200,
-    batch_size: int = 128,
+    num_epochs: int = 250,
+    batch_size: int = 96,
     lr: float = 1e-4,
     experiment_name: str = "ssl_transformer_v1",
     model_kwargs: dict | None = None,
@@ -779,7 +779,7 @@ if __name__ == "__main__":
     }
     
     # Fine-tuning settings (used if MODE == "finetune"), manually write the correct checkpoint name from the SSL pre-training run
-    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v2"  # Name of SSL experiment
+    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v3"  # Name of SSL experiment, change version number for each new run
     
     FINETUNE_NUM_EPOCHS = 50
     FINETUNE_BATCH_SIZE = 128

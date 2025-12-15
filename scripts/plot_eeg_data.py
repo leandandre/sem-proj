@@ -17,15 +17,32 @@ from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, Comp
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig
 
-config = PreprocessingConfig.from_yaml("configs/preprocess/notch_bandpass_resample_znorm.yaml")
+# config = PreprocessingConfig.from_yaml("configs/preprocess/notch_bandpass_resample_znorm.yaml")
 
 # Without augmentation
 print("Loading original dataset...")
-ds_orig = BoasDataset(subjects=["sub-1"], mode="headband", preprocess_config=config, use_cache=True)
-x_orig, y = ds_orig[0]
-print(f"✓ Loaded epoch with label: {y}")
+ds_orig_psg = BoasDataset(subjects=["sub-119"], mode="psg", use_cache=True)
+x_orig_psg, y_psg = ds_orig_psg[100]
+print(f"✓ Loaded epoch with label: {y_psg}")
+ds_orig_hb = BoasDataset(subjects=["sub-119"], mode="headband", use_cache=True)
+x_orig_hb, y_hb = ds_orig_hb[100]
 
+
+plt.figure(figsize=(12, 8))
+plt.subplots_adjust(left=0.1, right=0.95, top=0.93, bottom=0.08)
+plt.plot(x_orig_hb[0][0:1000].numpy(), label='Channel 1 headband')
+plt.plot(x_orig_hb[1][0:1000].numpy(), label='Channel 2 headband')
+plt.plot(x_orig_psg[0][0:1000].numpy(), label='Channel 1 psg')
+plt.plot(x_orig_psg[1][0:1000].numpy(), label='Channel 2 psg')
+plt.plot(x_orig_psg[2][0:1000].numpy(), label='Channel 3 psg')
+plt.plot(x_orig_psg[3][0:1000].numpy(), label='Channel 4 psg')
+plt.plot(x_orig_psg[4][0:1000].numpy(), label='Channel 5 psg')
+plt.plot(x_orig_psg[5][0:1000].numpy(), label='Channel 6 psg')
+plt.title("Original Signal - All Channels")
+plt.legend()
+plt.savefig(PROJECT_ROOT / "plots" / "headband_and_psg_frontal_tests.png", dpi=150)
 # Test individual augmentations
+
 print("\nGenerating augmented versions...")
 
 # Time-shift only

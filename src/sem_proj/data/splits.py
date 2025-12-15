@@ -14,10 +14,10 @@ SPLITS_FILE = PROJECT_ROOT / "data" / "processed" / "data_splits.json"
 
 
 def create_fixed_splits(
-    train_frac: float = 0.7,
-    val_frac: float = 0.15,
+    train_frac: float = 0.7,        # origianl split for train-val-test: 0.7, 0.15, 0.15
+    val_frac: float = 0.15,         
     test_frac: float = 0.15,
-    seed: int = 42,         # NEVER CHANGE THIS SEED
+    seed: int = 42,         # NEVER CHANGE THIS SEED!!!
     force_recreate: bool = False,
 ) -> Dict[str, List[str]]:
     """
@@ -64,6 +64,16 @@ def create_fixed_splits(
     n_train = int(train_frac * n_total)
     n_val = int(val_frac * n_total)
     # Rest goes to test (handles rounding)
+
+
+    ### for the SSL pretraining stage: use 80% of data for train, 5% for val (and 15% for test, unused) ###
+    ### train and val set should still be in the original train-val set (not from test set!) ###
+    ### --> the sorted function helps us to make sure of that ###
+    n_total = len(all_pids)
+    n_train = int(0.8 * n_total)
+    n_val = int(0.05 * n_total)
+    ### end of SSL pretraining stage split ### (delete or comment out for other stages)
+
     
     # Split PIDs
     train_pids = all_pids[:n_train]

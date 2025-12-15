@@ -1304,7 +1304,7 @@ class SSLClassifierHead(nn.Module):
         
         Parameters
         ----------
-        x : torch.Tensor, shape (batch, d_model)
+        x : torch.Tensor, shape (batch, target_token, d_model)
             Mean of transformer output.
         
         Returns
@@ -1312,5 +1312,7 @@ class SSLClassifierHead(nn.Module):
         torch.Tensor, shape (batch, num_classes)
             Class logits based on the mean of transformer outputs.
         """
-        logits = self.classifier(x)  # (batch, num_classes)
+        mean = x.mean(dim=1)  # (batch, d_model)
+        logits = self.classifier(mean)  # (batch, num_classes)
+        # logits = self.classifier(x)  # (batch, num_classes)
         return logits
