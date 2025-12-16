@@ -99,7 +99,7 @@ def make_epoch_dataloaders(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=7,
+        num_workers=7,      # 2 for local, 7 for cluster
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,   # set to True if num_workers > 0
@@ -109,7 +109,7 @@ def make_epoch_dataloaders(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=7,
+        num_workers=7,      # 2 for local, 7 for cluster
         drop_last=False,
         pin_memory=True,
         persistent_workers=True,   # set to True if num_workers > 0
@@ -267,9 +267,9 @@ def train_contextfree_classifierhead(
     train_subjects: Optional[list] = None,
     val_subjects: Optional[list] = None,
 ) -> float:
-    """Fine-tune SSL classifier head (context-free, per-epoch)."""
-    if ssl_checkpoint is None:
-        raise ValueError("ssl_checkpoint must be provided for classifier-head fine-tuning.")
+    """Fine-tune SSL classifier head (context-free, per-epoch).
+    IS ALSO USED FOR THE FULLY-SUPERVISED TRAINING TO COMPARE WITH THE SSL FINE-TUNING RESULTS.
+    """
 
     checkpoint_path = CHECKPOINT_DIR / experiment_name
     log_path = LOG_DIR / experiment_name
