@@ -184,7 +184,10 @@ def main():
     
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
-    SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
+    ### when running on laptop:
+    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
+    ### else when running on cluster:
+    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
     # SSL_CHECKPOINT = None
@@ -203,7 +206,7 @@ def main():
         FREEZE_ENCODER = False
         LR_HEAD = 1e-3
 
-    mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL Fine-Tuning"
+    mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL-FineTuning"
     
     print("\n" + "=" * 80)
     print(f"Context-Free Classifier Head Training - {mode_str}")
