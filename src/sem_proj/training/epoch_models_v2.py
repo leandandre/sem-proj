@@ -280,12 +280,19 @@ def train_contextfree_classifierhead(
         )
     seq_length = get_expected_seq_length(preprocess_config)
 
+    # Determine training mode
+    fully_supervised = ssl_checkpoint is None
+    
     print(f"\n{'='*70}")
-    print("Context-Free Classifier Head Fine-Tuning")
+    if fully_supervised:
+        print("Context-Free Classifier Head Training (Fully Supervised)")
+    else:
+        print("Context-Free Classifier Head Fine-Tuning (SSL Pretrained)")
     print(f"{'='*70}")
     print(f"Experiment: {experiment_name}")
     print(f"Device: {device}")
     print(f"Mode: {mode}")
+    print(f"Training mode: {'Fully supervised (random init)' if fully_supervised else 'Fine-tuning from SSL'}")
     print(f"Freeze encoder: {freeze_encoder}")
     print(f"Lr encoder: {lr_encoder}, lr head: {lr_head}")
     print(f"Preprocess: {preprocess_config.to_dict()}")
@@ -306,17 +313,32 @@ def train_contextfree_classifierhead(
     print(f"Validation epochs: {len(val_loader.dataset)}\n")
 
     # Build encoder + head
-    encoder = _load_ssl_encoder(
-        ssl_checkpoint,
-        mode=mode,
-        seq_length=seq_length,
-        d_model=d_model,
-        nhead=nhead,
-        num_layers=num_layers_encoder,
-        dim_feedforward=dim_feedforward,
-        dropout=dropout_encoder,
-        target_tokens=target_tokens,
-    )
+    if fully_supervised:
+        # Random init encoder for fully-supervised training
+        encoder = SSLEpochTransformerConv1D_v2(
+            input_channels=2 if mode == "headband" else 6,
+            seq_length=seq_length,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers_encoder,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout_encoder,
+            num_classes=num_classes,
+            target_tokens=target_tokens,
+        )
+    else:
+        # Load pretrained SSL encoder
+        encoder = _load_ssl_encoder(
+            ssl_checkpoint,
+            mode=mode,
+            seq_length=seq_length,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers_encoder,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout_encoder,
+            target_tokens=target_tokens,
+        )
     head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_encoder, num_classes=num_classes)
 
     model = nn.Sequential(encoder, head).to(device)
@@ -344,7 +366,7 @@ def train_contextfree_classifierhead(
         ]
     optimizer = torch.optim.AdamW(params, weight_decay=1e-2)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.5, patience=4
+        optimizer, mode="max", factor=0.25, patience=6
     )
 
     scaler = GradScaler()

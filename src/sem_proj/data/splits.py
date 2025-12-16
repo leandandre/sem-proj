@@ -66,13 +66,13 @@ def create_fixed_splits(
     # Rest goes to test (handles rounding)
 
 
-    ### for the SSL pretraining stage: use 80% of data for train, 5% for val (and 15% for test, unused) ###
-    ### train and val set should still be in the original train-val set (not from test set!) ###
-    ### --> the sorted function helps us to make sure of that ###
-    n_total = len(all_pids)
-    n_train = int(0.8 * n_total)
-    n_val = int(0.05 * n_total)
-    ### end of SSL pretraining stage split ### (delete or comment out for other stages)
+    # ### for the SSL pretraining stage: use 80% of data for train, 5% for val (and 15% for test, unused) ###
+    # ### train and val set should still be in the original train-val set (not from test set!) ###
+    # ### --> the sorted function helps us to make sure of that ###
+    # n_total = len(all_pids)
+    # n_train = int(0.8 * n_total)
+    # n_val = int(0.05 * n_total)
+    # ### end of SSL pretraining stage split ### (delete or comment out for other stages)
 
     
     # Split PIDs

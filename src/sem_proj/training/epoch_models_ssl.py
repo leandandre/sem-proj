@@ -217,7 +217,7 @@ def train_ssl_epochtransformer(
         weight_decay=0.01
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=6
+        optimizer, mode='min', factor=0.25, patience=6
     )
 
     # Training config for checkpoint
