@@ -1191,6 +1191,11 @@ class SSLEpochTransformerConv1D_v2(nn.Module):
     ):
         super().__init__()
         self.d_model = d_model
+
+        # self.nhead = nhead
+        # self.num_layers = num_layers
+        # self.dim_feedforward = dim_feedforward
+
         self.original_seq_length = seq_length
         self.target_tokens = target_tokens
         assert target_tokens in {480, 240}, "target_tokens must be 480 or 240"
