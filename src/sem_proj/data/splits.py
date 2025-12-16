@@ -146,7 +146,7 @@ def load_splits() -> Dict[str, List[str]]:
 
     ### uncomment out above after SSL pretraining stage and delete following temporary code ###
     print("New 0.8-0.05 split for SSL pretraining is being constructed...")
-    spl = create_fixed_splits()
+    spl = create_fixed_splits(force_recreate=True) # setting force_recreate=True important here
     print("New splits created for SSL pretraining stage.")
     print(f"  Train: {len(spl['train_pids'])} PIDs, percentage: {len(spl['train_pids'])/(len(spl['train_pids'])+len(spl['val_pids'])+len(spl['test_pids'])):.2%}")
     print(f"  Val:   {len(spl['val_pids'])} PIDs, percentage: {len(spl['val_pids'])/(len(spl['train_pids'])+len(spl['val_pids'])+len(spl['test_pids'])):.2%}")
