@@ -93,6 +93,7 @@ def run_stage1(
         num_layers_encoder=2,
         dim_feedforward=512,
         dropout_encoder=0.2,
+        dropout_head=0.2,
         target_tokens=240,
         class_weighted_loss=True,
         gradient_clip=5.0,
@@ -178,7 +179,7 @@ def run_stage2(
 def main():
        
     # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
-    FRACTION = 1.0
+    FRACTION = 0.2
     SEED = 42
     
     # Choose training mode

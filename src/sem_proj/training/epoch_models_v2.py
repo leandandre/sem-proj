@@ -259,6 +259,7 @@ def train_contextfree_classifierhead(
     num_layers_encoder: int = 3,
     dim_feedforward: int = 512,
     dropout_encoder: float = 0.2,
+    dropout_head: float = 0.2,
     target_tokens: int = 240,
     class_weighted_loss: bool = True,
     gradient_clip: float = 5.0,
@@ -333,18 +334,25 @@ def train_contextfree_classifierhead(
         )
     else:
         # Load pretrained SSL encoder
-        encoder = _load_ssl_encoder(
-            ssl_checkpoint,
-            mode=mode,
-            seq_length=seq_length,
-            d_model=d_model,
-            nhead=nhead,
-            num_layers=num_layers_encoder,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout_encoder,
-            target_tokens=target_tokens,
-        )
-    head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_encoder, num_classes=num_classes)
+        # encoder = _load_ssl_encoder(
+        #     ssl_checkpoint,
+        #     mode=mode,
+        #     seq_length=seq_length,
+        #     d_model=d_model,
+        #     nhead=nhead,
+        #     num_layers=num_layers_encoder,
+        #     dim_feedforward=dim_feedforward,
+        #     dropout=dropout_encoder,
+        #     target_tokens=target_tokens,
+        # )
+        checkpoint_from_ssl = torch.load(ssl_checkpoint, map_location='cpu')
+        encoder_hb_cfg = checkpoint_from_ssl['hyperparameters_hb']      # number of layers, d_model, layers, etc.
+        encoder = SSLEpochTransformerConv1D_v2(**encoder_hb_cfg).to(device)
+        encoder.load_state_dict(checkpoint_from_ssl['encoder_hb_state_dict'])
+        print(f"Loaded SSL encoder from {ssl_checkpoint}")
+        print(f"Encoder config from checkpoint: {encoder_hb_cfg}")
+        
+    head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_head, num_classes=num_classes)
 
     model = nn.Sequential(encoder, head).to(device)
 
@@ -446,11 +454,12 @@ def train_contextfree_classifierhead(
                         "mode": mode,
                         "seq_length": seq_length,
                         "d_model": encoder.d_model,
-                        # "nhead": encoder.nhead,
-                        # "num_layers": encoder.num_layers,
-                        # "dim_feedforward": encoder.dim_feedforward,
-                        # "dropout": dropout_encoder,
-                        "target_tokens": target_tokens,
+                        "nhead": nhead if fully_supervised else encoder_hb_cfg['nhead'],    # fully_supervised -> we determine cfg before running the script, ...
+                        "num_layers": num_layers_encoder if fully_supervised else encoder_hb_cfg['num_layers'],                                   # ...else use loaded cfg (pretrained model)
+                        "dim_feedforward": dim_feedforward if fully_supervised else encoder_hb_cfg['dim_feedforward'],
+                        "dropout_encoder": dropout_encoder if fully_supervised else encoder_hb_cfg['dropout'],
+                        "dropout_head": dropout_head,
+                        "target_tokens": target_tokens if fully_supervised else encoder_hb_cfg['target_tokens'],
                         "num_classes": num_classes,
                     },
                     "training_config": {
