@@ -184,10 +184,10 @@ def main():
     
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
-    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
+    SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
-    SSL_CHECKPOINT = None
+    # SSL_CHECKPOINT = None
     
     NUM_EPOCHS = 80
     BATCH_SIZE = 512
@@ -200,7 +200,7 @@ def main():
     else:
         # Fine-tuning: smaller encoder LR, larger head LR, set freeze flag to train classifier head only
         LR_ENCODER = 1e-5
-        FREEZE_ENCODER = True
+        FREEZE_ENCODER = False
         LR_HEAD = 1e-3
 
     mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL Fine-Tuning"
