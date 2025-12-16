@@ -145,6 +145,7 @@ def load_splits() -> Dict[str, List[str]]:
     #     splits = json.load(f)
 
     ### uncomment out above after SSL pretraining stage and delete following temporary code ###
+    ### for the first run after the SSL pretraining stage, we need to force_recreate=True for once!! ###
     print("New 0.8-0.05 split for SSL pretraining is being constructed...")
     spl = create_fixed_splits(force_recreate=True) # setting force_recreate=True important here
     print("New splits created for SSL pretraining stage.")

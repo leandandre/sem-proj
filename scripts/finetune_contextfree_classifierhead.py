@@ -185,9 +185,9 @@ def main():
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
     ### when running on laptop:
-    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
+    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v4" / "best_model.pt"
     ### else when running on cluster:
-    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model_hb.pt"
+    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v4" / "best_model.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
     # SSL_CHECKPOINT = None

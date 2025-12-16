@@ -772,7 +772,7 @@ if __name__ == "__main__":
     SSL_MODEL_CONFIG = {
         'd_model': 128,
         'nhead': 4,
-        'num_layers': 3,
+        'num_layers': 2,
         'dim_feedforward': 512,
         'dropout': 0.2,
         'target_tokens': 240   # when changing to SSLEpochTransformerConv1D_v2 this should be target_tokens = 240
