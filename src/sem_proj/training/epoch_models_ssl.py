@@ -779,7 +779,7 @@ if __name__ == "__main__":
     }
     
     # Fine-tuning settings (used if MODE == "finetune"), manually write the correct checkpoint name from the SSL pre-training run
-    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v3"  # Name of SSL experiment, change version number for each new run
+    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v4"  # Name of SSL experiment, change version number for each new run
     
     FINETUNE_NUM_EPOCHS = 50
     FINETUNE_BATCH_SIZE = 128

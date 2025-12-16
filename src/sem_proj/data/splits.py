@@ -58,7 +58,8 @@ def create_fixed_splits(
     # Shuffle PIDs
     rng = np.random.RandomState(seed)
     rng.shuffle(all_pids)
-    
+    # all_pids now shuffled by using the fixed seed
+
     # Calculate split sizes
     n_total = len(all_pids)
     n_train = int(train_frac * n_total)
@@ -66,13 +67,13 @@ def create_fixed_splits(
     # Rest goes to test (handles rounding)
 
 
-    # ### for the SSL pretraining stage: use 80% of data for train, 5% for val (and 15% for test, unused) ###
-    # ### train and val set should still be in the original train-val set (not from test set!) ###
-    # ### --> the sorted function helps us to make sure of that ###
-    # n_total = len(all_pids)
-    # n_train = int(0.8 * n_total)
-    # n_val = int(0.05 * n_total)
-    # ### end of SSL pretraining stage split ### (delete or comment out for other stages)
+    ### for the SSL pretraining stage: use 80% of data for train, 5% for val (and 15% for test, unused) ###
+    ### train and val set should still be in the original train-val set (not from test set!) ###
+    ### --> the sorted function helps us to make sure of that ###
+    n_total = len(all_pids)
+    n_train = int(0.8 * n_total)
+    n_val = int(0.05 * n_total)
+    ### end of SSL pretraining stage split ### (delete or comment out for other stages)
 
     
     # Split PIDs
@@ -136,12 +137,22 @@ def load_splits() -> Dict[str, List[str]]:
     dict
         Dictionary with keys 'train_subjects', 'val_subjects', 'test_subjects'
     """
-    if not SPLITS_FILE.exists():
-        print("No existing splits found. Creating new splits...")
-        return create_fixed_splits()
+    # if not SPLITS_FILE.exists():
+    #     print("No existing splits found. Creating new splits...")
+    #     return create_fixed_splits()
     
-    with open(SPLITS_FILE, 'r') as f:
-        splits = json.load(f)
+    # with open(SPLITS_FILE, 'r') as f:
+    #     splits = json.load(f)
+
+    ### uncomment out above after SSL pretraining stage and delete following temporary code ###
+    print("New 0.8-0.05 split for SSL pretraining is being constructed...")
+    spl = create_fixed_splits()
+    print("New splits created for SSL pretraining stage.")
+    print(f"  Train: {len(spl['train_pids'])} PIDs, percentage: {len(spl['train_pids'])/(len(spl['train_pids'])+len(spl['val_pids'])+len(spl['test_pids'])):.2%}")
+    print(f"  Val:   {len(spl['val_pids'])} PIDs, percentage: {len(spl['val_pids'])/(len(spl['train_pids'])+len(spl['val_pids'])+len(spl['test_pids'])):.2%}")
+    print(f"  Test:  {len(spl['test_pids'])} PIDs, percentage: {len(spl['test_pids'])/(len(spl['train_pids'])+len(spl['val_pids'])+len(spl['test_pids'])):.2%}")
+    return spl
+    ### end of temporary code ###
     
     return splits
 
