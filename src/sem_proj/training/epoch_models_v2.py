@@ -26,6 +26,7 @@ from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
 from sem_proj.models.model_factory import SSLEpochTransformerConv1D_v2, SSLClassifierHead
+from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
 # Seeds
 random.seed(42)
@@ -70,11 +71,13 @@ def make_epoch_dataloaders(
     tr_subs = train_subjects if train_subjects is not None else get_train_subjects()
     val_subs = val_subjects if val_subjects is not None else get_val_subjects()
 
-    # No augmentation by default; can be extended later
     train_transform = None
-    if use_augmentation and mode == "headband":
-        # placeholder for future transforms
-        train_transform = None
+    if use_augmentation:
+        train_transform = Compose([
+            RandomTimeShift(max_shift_ratio=0.10),      # +-% time shift
+            RandomAmplitudeScale(scale_range=(0.9, 1.1)),  # +-% amplitude
+            RandomGaussianNoise(noise_scale=(0.01, 0.05)),   # Add Gaussian noise
+        ])
 
     train_ds = BoasDataset(
         subjects=tr_subs,
@@ -96,18 +99,20 @@ def make_epoch_dataloaders(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=7,
         drop_last=False,
         pin_memory=True,
+        persistent_workers=True,   # set to True if num_workers > 0
     )
 
     val_loader = DataLoader(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=7,
         drop_last=False,
         pin_memory=True,
+        persistent_workers=True,   # set to True if num_workers > 0
     )
 
     return train_loader, val_loader
@@ -304,7 +309,7 @@ def train_contextfree_classifierhead(
         batch_size=batch_size,
         preprocess_config=preprocess_config,
         use_cache=use_cache,
-        use_augmentation=False,
+        use_augmentation=True,      # use augmentation for training
         mode=mode,
         train_subjects=train_subjects,
         val_subjects=val_subjects,

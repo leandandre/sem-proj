@@ -195,10 +195,11 @@ def main():
         # Fully-supervised: use same LR for encoder and head
         LR_ENCODER = 1e-3
         LR_HEAD = 1e-3
+        FREEZE_ENCODER = False
     else:
         # Fine-tuning: smaller encoder LR, larger head LR, set freeze flag to train classifier head only
         LR_ENCODER = 1e-5
-        FREEZE_ENCODER = False
+        FREEZE_ENCODER = True
         LR_HEAD = 1e-3
 
     mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL Fine-Tuning"
