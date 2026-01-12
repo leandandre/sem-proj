@@ -16,6 +16,7 @@ Stage 2: Final Evaluation
 - Test on full test_subjects
 """
 import sys
+import json
 from pathlib import Path
 import random
 from typing import List
@@ -24,12 +25,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sem_proj.data.preprocessing import PreprocessingConfig
-from sem_proj.data.splits import get_train_subjects, get_val_subjects, get_test_subjects
+# from sem_proj.data.splits import get_train_subjects, get_val_subjects, get_test_subjects
 from sem_proj.training.epoch_models_v2 import train_contextfree_classifierhead
 
 CONFIG_DIR = PROJECT_ROOT / "configs" / "preprocess"
 CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 CHECKPOINT_LEOMED_DIR = PROJECT_ROOT / "checkpoints_leomed"
+
+SPLITS_FILE = PROJECT_ROOT / "data" / "processed" / "data_splits_70_15_15.json"
 
 
 def sample_subjects(subjects: List[str], fraction: float, seed: int = 42) -> List[str]:
@@ -62,8 +65,12 @@ def run_stage1(
     print(f"Train on {fraction*100:.0f}% of train_subjects; validate on full val_subjects")
     print("=" * 80 + "\n")
 
-    train_subjects = get_train_subjects()
-    val_subjects = get_val_subjects()
+    assert SPLITS_FILE.exists(), f"Splits file not found: {SPLITS_FILE}"
+    with open(SPLITS_FILE, 'r') as f:
+        splits = json.load(f)
+
+    train_subjects = splits['train_subjects']
+    val_subjects = splits['val_subjects']
     sampled_train = sample_subjects(train_subjects, fraction, seed)
 
     print("Subject allocation:")
@@ -127,10 +134,14 @@ def run_stage2(
     print("=" * 80)
     print(f"Train on {fraction*100:.0f}% of (train + val); test on full test_subjects")
     print("=" * 80 + "\n")
+    
+    assert SPLITS_FILE.exists(), f"Splits file not found: {SPLITS_FILE}"
+    with open(SPLITS_FILE, 'r') as f:
+        splits = json.load(f)
 
-    train_subjects = get_train_subjects()
-    val_subjects = get_val_subjects()
-    test_subjects = get_test_subjects()
+    train_subjects = splits['train_subjects']
+    val_subjects = splits['val_subjects']
+    test_subjects = splits['test_subjects']
 
     combined = train_subjects + val_subjects
     sampled_train = sample_subjects(combined, fraction, seed)
@@ -185,9 +196,9 @@ def main():
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
     ### when running on laptop:
-    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v4" / "best_model.pt"
+    SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     ### else when running on cluster:
-    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v4" / "best_model.pt"
+    # SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
     # SSL_CHECKPOINT = None

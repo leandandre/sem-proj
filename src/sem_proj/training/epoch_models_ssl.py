@@ -417,7 +417,7 @@ def train_ssl_epochtransformer(
     return model_hb, model_psg
 
 
-### forget about this function for now ###
+### forget about this function for now, I finetune using finetune_contextfree_classifierhead.py ###
 def fine_tune_ssl_encoder(
         encoder_checkpoint_path: Path,
         num_epochs: int = 50,
