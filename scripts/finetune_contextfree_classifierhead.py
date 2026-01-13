@@ -190,16 +190,16 @@ def run_stage2(
 def main():
        
     # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
-    FRACTION = 0.2
+    FRACTION = 1.0
     SEED = 42
     SSL_CHECKPOINT = None
 
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
     ### when running on laptop:
-    SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     ### else when running on cluster:
-    # SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
     # SSL_CHECKPOINT = None
@@ -215,7 +215,7 @@ def main():
     else:
         # Fine-tuning: smaller encoder LR, larger head LR, set freeze flag to train classifier head only
         LR_ENCODER = 1e-5
-        FREEZE_ENCODER = False
+        FREEZE_ENCODER = True
         LR_HEAD = 1e-3
 
     mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL-FineTuning"
@@ -239,7 +239,7 @@ def main():
         lr_encoder=LR_ENCODER,
         freeze_encoder_flag=FREEZE_ENCODER,
         lr_head=LR_HEAD,
-        experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
+        experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}_linearprobing",
     )
 
     # Stage 2 (final evaluation) - uncomment when ready
