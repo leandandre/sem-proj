@@ -1321,3 +1321,35 @@ class SSLClassifierHead(nn.Module):
         logits = self.classifier(mean)  # (batch, num_classes)
         # logits = self.classifier(x)  # (batch, num_classes)
         return logits
+    
+class SSLLinearProbing(nn.Module):
+    """
+    Linear Classifier to evaluate the quality of learned SSL embeddings.
+    """
+    def __init__(
+            self,
+            d_model=64,
+            num_classes=5,
+    ):
+        super().__init__()
+        self.classifier = nn.Linear(d_model, num_classes)
+    
+    def forward(self, x):
+        """
+        Forward pass for linear probing classifier.
+        
+        Parameters
+        ----------
+        x : torch.Tensor, shape (batch, target_token, d_model)
+            Mean of transformer output.
+        
+        Returns
+        -------
+        torch.Tensor, shape (batch, num_classes)
+            Class logits based on the mean of transformer outputs.
+        """
+        mean = x.mean(dim=1)  # (batch, d_model)
+        mean_normed = mean / torch.linalg.norm(mean, ord=2, dim=1) # L2 normalization, optional
+        logits = self.classifier(mean_normed)  # (batch, num_classes)
+        return logits
+        

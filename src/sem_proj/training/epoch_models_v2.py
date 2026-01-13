@@ -7,6 +7,8 @@ fine-tune only on individual epochs without sequence context.
 """
 from __future__ import annotations
 
+from json import encoder
+from json import encoder
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 import os
@@ -25,7 +27,7 @@ from sklearn.metrics import f1_score
 from sem_proj.data.datasets import BoasDataset
 from sem_proj.data.preprocessing import PreprocessingConfig, get_expected_seq_length
 from sem_proj.data.splits import get_train_subjects, get_val_subjects
-from sem_proj.models.model_factory import SSLEpochTransformerConv1D_v2, SSLClassifierHead
+from sem_proj.models.model_factory import SSLEpochTransformerConv1D_v2, SSLClassifierHead, SSLLinearProbing
 from sem_proj.data.transforms import RandomTimeShift, RandomAmplitudeScale, RandomGaussianNoise, Compose
 
 # Seeds
@@ -174,75 +176,6 @@ def evaluate_epoch_classifier(
 
     return avg_loss, accuracy, macro_f1, per_class_f1
 
-
-def _load_ssl_encoder(
-    checkpoint_path: Path,
-    mode: str,
-    seq_length: int,
-    d_model: int,
-    nhead: int,
-    num_layers: int,
-    dim_feedforward: int,
-    dropout: float,
-    target_tokens: int,
-) -> SSLEpochTransformerConv1D_v2:
-    """Load SSL encoder with checkpoint-aware hyperparameters if available."""
-    ckpt = torch.load(checkpoint_path, map_location="cpu")
-
-    # Try to recover hyperparameters from checkpoint
-    key = "hyperparameters_hb" if mode == "headband" else "hyperparameters_psg"
-    hp = ckpt.get(key)
-    if hp is None:
-        hp = ckpt.get("hyperparameters", None)
-
-    if hp:
-        # Override provided args with checkpoint values for safety
-        cfg = dict(
-            input_channels=hp.get("input_channels", 2 if mode == "headband" else 6),
-            seq_length=hp.get("seq_length", seq_length),
-            d_model=hp.get("d_model", d_model),
-            nhead=hp.get("nhead", nhead),
-            num_layers=hp.get("num_layers", num_layers),
-            dim_feedforward=hp.get("dim_feedforward", dim_feedforward),
-            dropout=hp.get("dropout", dropout),
-            num_classes=hp.get("num_classes", 5),
-            target_tokens=hp.get("target_tokens", target_tokens),
-        )
-    else:
-        cfg = dict(
-            input_channels=2 if mode == "headband" else 6,
-            seq_length=seq_length,
-            d_model=d_model,
-            nhead=nhead,
-            num_layers=num_layers,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            num_classes=5,
-            target_tokens=target_tokens,
-        )
-
-    encoder = SSLEpochTransformerConv1D_v2(**cfg)
-
-    # Load state dict
-    state_key = "encoder_hb_state_dict" if mode == "headband" else "encoder_psg_state_dict"
-    fallback_keys = ["encoder_state_dict", "model_state_dict", "state_dict"]
-    if state_key in ckpt:
-        encoder.load_state_dict(ckpt[state_key])
-    else:
-        loaded = False
-        for fk in fallback_keys:
-            if fk in ckpt:
-                encoder.load_state_dict(ckpt[fk])
-                loaded = True
-                break
-        if not loaded:
-            raise KeyError(
-                f"Could not find encoder weights in checkpoint. Tried: {state_key}, {fallback_keys}"
-            )
-
-    return encoder
-
-
 def train_contextfree_classifierhead(
     num_epochs: int = 50,
     batch_size: int = 32,
@@ -352,7 +285,10 @@ def train_contextfree_classifierhead(
         print(f"Loaded SSL encoder from {ssl_checkpoint}")
         print(f"Encoder config from checkpoint: {encoder_hb_cfg}")
         
-    head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_head, num_classes=num_classes)
+    # head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_head, num_classes=num_classes)
+
+    head = SSLLinearProbing(input_dim=encoder.d_model, num_classes=num_classes)
+    print("-!-!-! LINEAR PROBING in use -!-!-!")
 
     model = nn.Sequential(encoder, head).to(device)
 

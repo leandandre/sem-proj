@@ -192,7 +192,8 @@ def main():
     # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
     FRACTION = 0.2
     SEED = 42
-    
+    SSL_CHECKPOINT = None
+
     # Choose training mode
     # Option 1: FINE-TUNING (set to your SSL checkpoint path)
     ### when running on laptop:
