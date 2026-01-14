@@ -285,10 +285,11 @@ def train_contextfree_classifierhead(
         print(f"Loaded SSL encoder from {ssl_checkpoint}")
         print(f"Encoder config from checkpoint: {encoder_hb_cfg}")
         
-    # head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_head, num_classes=num_classes)
+    head = SSLClassifierHead(d_model=encoder.d_model, dropout=dropout_head, num_classes=num_classes)
+    print("-!-!-! Non-linear SSL Classifier Head in use -!-!-!")
 
-    head = SSLLinearProbing(input_dim=encoder.d_model, num_classes=num_classes)
-    print("-!-!-! LINEAR PROBING in use -!-!-!")
+    # head = SSLLinearProbing(d_model=encoder.d_model, num_classes=num_classes)
+    # print("-!-!-! LINEAR PROBING in use -!-!-!")
 
     model = nn.Sequential(encoder, head).to(device)
 

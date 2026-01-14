@@ -1349,7 +1349,7 @@ class SSLLinearProbing(nn.Module):
             Class logits based on the mean of transformer outputs.
         """
         mean = x.mean(dim=1)  # (batch, d_model)
-        mean_normed = mean / torch.linalg.norm(mean, ord=2, dim=1) # L2 normalization, optional
+        mean_normed = mean / torch.linalg.norm(mean, ord=2, dim=1, keepdim=True) # L2 normalization, optional
         logits = self.classifier(mean_normed)  # (batch, num_classes)
         return logits
         

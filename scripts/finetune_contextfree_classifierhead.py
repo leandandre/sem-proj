@@ -1,9 +1,14 @@
 """
-Context-free SSL classifier head training script with controlled labeled data fractions.
+Context-free SSL training script with controlled labeled data fractions.
 
 Supports TWO modes:
 1. FINE-TUNING: Set SSL_CHECKPOINT to your pretrained SSL encoder
 2. FULLY-SUPERVISED: Set SSL_CHECKPOINT = None for end-to-end random init training
+
+ALSO: supports linear probing, just change classifier head in epoch_models_v2.py to SSLLinearProbing!
+no changes needed here except for the naming of the experiment.
+
+--> used this script to compare linear probe vs. fine-tuned vs. fully-supervised, depending on proportion p of labeled data used.
 
 Two-stage workflow (mirrors finetune_variable_gru.py):
 
@@ -190,7 +195,7 @@ def run_stage2(
 def main():
        
     # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
-    FRACTION = 1.0
+    FRACTION = 0.5
     SEED = 42
     SSL_CHECKPOINT = None
 
@@ -199,12 +204,12 @@ def main():
     ### when running on laptop:
     # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     ### else when running on cluster:
-    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    # SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     
     # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
     # SSL_CHECKPOINT = None
     
-    NUM_EPOCHS = 80
+    NUM_EPOCHS = 200
     BATCH_SIZE = 512
     
     if SSL_CHECKPOINT is None:
@@ -239,7 +244,7 @@ def main():
         lr_encoder=LR_ENCODER,
         freeze_encoder_flag=FREEZE_ENCODER,
         lr_head=LR_HEAD,
-        experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}_linearprobing",
+        experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
     )
 
     # Stage 2 (final evaluation) - uncomment when ready
