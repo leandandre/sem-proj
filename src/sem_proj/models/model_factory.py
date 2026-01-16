@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 from matplotlib.pylab import rint
 import torch
 import torch.nn as nn
@@ -1180,7 +1181,7 @@ class SSLEpochTransformerConv1D_v2(nn.Module):
     def __init__(
         self,
         input_channels=2,
-        seq_length=7680,
+        seq_length: Optional[int] = None,
         d_model=64,
         nhead=8,
         num_layers=4,

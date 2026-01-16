@@ -189,7 +189,7 @@ def train_contextfree_classifierhead(
     freeze_encoder: bool = False,
     d_model: int = 128,
     nhead: int = 4,
-    num_layers_encoder: int = 3,
+    num_layers_encoder: int = 2,
     dim_feedforward: int = 512,
     dropout_encoder: float = 0.2,
     dropout_head: float = 0.2,
