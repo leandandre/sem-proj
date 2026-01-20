@@ -88,8 +88,8 @@ def run_stage1(
     )
 
 
-    #model parameters are set here! #
-    best_f1 = train_contextfree_classifierhead(
+    # model parameters are set here! keep them fixed as they are here! otherwise model loading might not work #
+    best_f1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
         num_epochs=num_epochs,
         batch_size=batch_size,
         lr_encoder=lr_encoder,
@@ -117,8 +117,10 @@ def run_stage1(
 
     print("\n" + "=" * 80)
     print(f"STAGE 1 COMPLETE - Best Val F1: {best_f1:.4f}")
+    print(f"Final Val Accuracy: {fin_acc:.4f}")
+    print(f"Final Per-Class F1: {fin_per_class_f1}")
     print("=" * 80 + "\n")
-    return best_f1
+    return best_f1, fin_acc, fin_per_class_f1
 
 
 def run_stage2(
@@ -161,7 +163,7 @@ def run_stage2(
         CONFIG_DIR / "notch_bandpass_resample_znorm.yaml"
     )
 
-    best_f1 = train_contextfree_classifierhead(
+    best_f1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
         num_epochs=num_epochs,
         batch_size=batch_size,
         lr_encoder=lr_encoder,
@@ -188,85 +190,159 @@ def run_stage2(
 
     print("\n" + "=" * 80)
     print(f"STAGE 2 COMPLETE - Test F1: {best_f1:.4f}")
+    print(f"Final Test Accuracy: {fin_acc:.4f}")
+    print(f"Final Test Per-Class F1: {fin_per_class_f1}")
     print("=" * 80 + "\n")
-    return best_f1
+    return best_f1, fin_acc, fin_per_class_f1
 
 
-def main():
-       
-    # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
-    FRACTION = 0.5
+def main():     # Run experiments for different fractions and modes
     SEED = 42
-    SSL_CHECKPOINT = None
-
-    # Choose training mode
-    # Option 1: FINE-TUNING (set to your SSL checkpoint path)
-    ### when running on laptop:
-    # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
-    ### else when running on cluster:
-    SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
-    
-    # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
-    # SSL_CHECKPOINT = None
-    
     NUM_EPOCHS = 200
     BATCH_SIZE = 512
+    res_finetuning_dict = {}
+    res_fullysuperv_dict = {}
+    TARGET_DIR = PROJECT_ROOT / "reports" / "metrics"
+    TARGET_DIR.mkdir(parents=True, exist_ok=True)
+
+    for mode in ["ssl-finetuning", "fully-supervised"]:
+        if mode == "ssl-finetuning":
+            SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt" # use CHECKPOINT_LEOMED_DIR when on laptop
+            FREEZE_ENCODER = False # allow some learning in the encoder as well
+            LR_HEAD = 1e-3
+            LR_ENCODER = 1e-5
+        elif mode == "fully-supervised":
+            SSL_CHECKPOINT = None
+            FREEZE_ENCODER = False
+            LR_HEAD = 1e-3
+            LR_ENCODER = LR_HEAD
+        else: 
+            raise ValueError(f"Unknown mode: {mode}")
+        
+        for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]:
+            print("\n" + "#" * 100)
+            print(f"RUNNING MODE: {mode.upper()} | LABELED FRACTION: {p*100:.0f}%")
+            print("#" * 100 + "\n")
+
+            # Stage 2 (testing)
+            stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage2(
+                fraction=p,
+                seed=SEED,
+                ssl_checkpoint=SSL_CHECKPOINT,
+                num_epochs=NUM_EPOCHS,
+                batch_size=BATCH_SIZE,
+                lr_encoder=LR_ENCODER,
+                freeze_encoder_flag=FREEZE_ENCODER,
+                lr_head=LR_HEAD,
+                experiment_name=f"ctxfree_stage1_p{p}_{mode.lower().replace('-', '_')}",
+            )
+            if mode == "ssl-finetuning":
+                res_finetuning_dict[str(p)] = {
+                    "stage2_mf1": stage2_mf1,
+                    "stage2_acc": stage2_acc,
+                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                }
+            if mode == "fully-supervised":
+                res_fullysuperv_dict[str(p)] = {
+                    "stage2_mf1": stage2_mf1,
+                    "stage2_acc": stage2_acc,
+                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                }
+
+            print("\n" + "=" * 80)
+            print("RUN COMPLETE")
+            print("=" * 80)
+            print(f"Mode: {mode.upper()}")
+            print(f"Fraction: {p*100:.0f}%")
+            print(f"Stage 2 best Val F1: {stage2_mf1:.4f}")
+            print(f"Stage 2 final Val Acc: {stage2_acc:.4f}")
+            print(f"Stage 2 final Per-Class F1: {stage2_per_class_f1}")
+            print("=" * 80 + "\n")
+    with open(TARGET_DIR / "ctxfree_finetuning_results_stage2.json", 'w') as f:
+        json.dump(res_finetuning_dict, f, indent=4)
+    with open(TARGET_DIR / "ctxfree_fullysupervised_results_stage2.json", 'w') as f:
+        json.dump(res_fullysuperv_dict, f, indent=4)
+
     
-    if SSL_CHECKPOINT is None:
-        # Fully-supervised: use same LR for encoder and head
-        LR_ENCODER = 1e-3
-        LR_HEAD = 1e-3
-        FREEZE_ENCODER = False
-    else:
-        # Fine-tuning: smaller encoder LR, larger head LR, set freeze flag to train classifier head only
-        LR_ENCODER = 1e-5
-        FREEZE_ENCODER = False
-        LR_HEAD = 1e-3
 
-    mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL-FineTuning"
+
+    # # Fraction of labeled data to use (e.g., 0.1 = 10%, 1.0 = 100%)
+    # FRACTION = 0.5
+    # SEED = 42
+    # SSL_CHECKPOINT = None
+
+    # # Choose training mode
+    # # Option 1: FINE-TUNING (set to your SSL checkpoint path)
+    # ### when running on laptop:
+    # # SSL_CHECKPOINT = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    # ### else when running on cluster:
+    # SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
     
-    print("\n" + "=" * 80)
-    print(f"Context-Free Classifier Head Training - {mode_str}")
-    print("=" * 80)
-    print(f"Fraction: {FRACTION*100:.0f}% | Seed: {SEED}")
-    print(f"SSL checkpoint: {SSL_CHECKPOINT}")
-    print(f"Epochs: {NUM_EPOCHS} | Batch size: {BATCH_SIZE}")
-    print(f"LR encoder: {LR_ENCODER} | LR head: {LR_HEAD}")
-    print("=" * 80 + "\n")
+    # # Option 2: FULLY-SUPERVISED END-TO-END (set to None)
+    # # SSL_CHECKPOINT = None
+    
+    # NUM_EPOCHS = 200
+    # BATCH_SIZE = 512
+    
+    # if SSL_CHECKPOINT is None:
+    #     # Fully-supervised: use same LR for encoder and head
+    #     LR_ENCODER = 1e-3
+    #     LR_HEAD = 1e-3
+    #     FREEZE_ENCODER = False
+    # else:
+    #     # Fine-tuning: smaller encoder LR, larger head LR, set freeze flag to train classifier head only
+    #     LR_ENCODER = 1e-5
+    #     FREEZE_ENCODER = False
+    #     LR_HEAD = 1e-3
 
-    # Stage 1 (tuning)
-    stage1_f1 = run_stage1(
-        fraction=FRACTION,
-        seed=SEED,
-        ssl_checkpoint=SSL_CHECKPOINT,
-        num_epochs=NUM_EPOCHS,
-        batch_size=BATCH_SIZE,
-        lr_encoder=LR_ENCODER,
-        freeze_encoder_flag=FREEZE_ENCODER,
-        lr_head=LR_HEAD,
-        experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
-    )
+    # mode_str = "Fully-Supervised" if SSL_CHECKPOINT is None else "SSL-FineTuning"
+    
+    # print("\n" + "=" * 80)
+    # print(f"Context-Free Classifier Head Training - {mode_str}")
+    # print("=" * 80)
+    # print(f"Fraction: {FRACTION*100:.0f}% | Seed: {SEED}")
+    # print(f"SSL checkpoint: {SSL_CHECKPOINT}")
+    # print(f"Epochs: {NUM_EPOCHS} | Batch size: {BATCH_SIZE}")
+    # print(f"LR encoder: {LR_ENCODER} | LR head: {LR_HEAD}")
+    # print("=" * 80 + "\n")
 
-    # Stage 2 (final evaluation) - uncomment when ready
-    # stage2_f1 = run_stage2(
+    # # Stage 1 (tuning)
+    # stage1_mf1, stage1_acc, stage1_per_class_f1 = run_stage1(
     #     fraction=FRACTION,
     #     seed=SEED,
     #     ssl_checkpoint=SSL_CHECKPOINT,
     #     num_epochs=NUM_EPOCHS,
     #     batch_size=BATCH_SIZE,
     #     lr_encoder=LR_ENCODER,
+    #     freeze_encoder_flag=FREEZE_ENCODER,
     #     lr_head=LR_HEAD,
-    #     experiment_name=f"ctxfree_stage2_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
+    #     experiment_name=f"ctxfree_stage1_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
     # )
 
-    print("\n" + "=" * 80)
-    print("DONE")
-    print("=" * 80)
-    print(f"Mode: {mode_str}")
-    print(f"Fraction: {FRACTION*100:.0f}%")
-    print(f"Stage 1 best Val F1: {stage1_f1:.4f}")
-    # print(f"Stage 2 Test F1: {stage2_f1:.4f}")
-    print("=" * 80 + "\n")
+    # # Stage 2 (final evaluation) - uncomment when ready
+    # # stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage2(
+    # #     fraction=FRACTION,
+    # #     seed=SEED,
+    # #     ssl_checkpoint=SSL_CHECKPOINT,
+    # #     num_epochs=NUM_EPOCHS,
+    # #     batch_size=BATCH_SIZE,
+    # #     lr_encoder=LR_ENCODER,
+    # #     lr_head=LR_HEAD,
+    # #     experiment_name=f"ctxfree_stage2_p{FRACTION}_{mode_str.lower().replace('-', '_')}",
+    # # )
+
+    # print("\n" + "=" * 80)
+    # print("DONE")
+    # print("=" * 80)
+    # print(f"Mode: {mode_str}")
+    # print(f"Fraction: {FRACTION*100:.0f}%")
+    # print(f"Stage 1 best Val F1: {stage1_mf1:.4f}")
+    # print(f"Stage 1 final Val Acc: {stage1_acc:.4f}")
+    # print(f"Stage 1 final Per-Class F1: {stage1_per_class_f1}")
+    # # print(f"Stage 2 Test F1: {stage2_mf1:.4f}")
+    # # print(f"Stage 2 Test Acc: {stage2_acc:.4f}")
+    # # print(f"Stage 2 Test Per-Class F1: {stage2_per_class_f1}")
+    # print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":

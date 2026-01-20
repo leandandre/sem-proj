@@ -11,10 +11,13 @@ import json
 from pathlib import Path
 import random
 from typing import List
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
 from sem_proj.data.preprocessing import PreprocessingConfig
 from sem_proj.training.sequence_models_v2 import train_contextsensitive_classifier
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = PROJECT_ROOT / "configs" / "preprocess"
 CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
 CHECKPOINT_LEOMED_DIR = PROJECT_ROOT / "checkpoints_leomed"
@@ -135,7 +138,7 @@ def main():
     # SSL_CHECKPOINT = None
     
     NUM_EPOCHS = 200
-    BATCH_SIZE = 512
+    BATCH_SIZE = 64
     SEQ_LENGTH = 20
     STRIDE = 5
     
