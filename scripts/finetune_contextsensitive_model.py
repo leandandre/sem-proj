@@ -215,7 +215,7 @@ def main():
             print(f"RUNNING MODE: {mode.upper()} | LABELED FRACTION: {p*100:.0f}%")
             print("#" * 100 + "\n")
 
-            stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage1(
+            stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage2(
                 fraction=p,
                 seed=SEED,
                 ssl_checkpoint=SSL_CHECKPOINT,
