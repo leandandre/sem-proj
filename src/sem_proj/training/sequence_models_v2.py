@@ -206,7 +206,7 @@ def train_contextsensitive_classifier(
         num_classes: int = 5,
         train_subjects: Optional[List[str]] = None,
         val_subjects: Optional[List[str]] = None,
-) -> float:
+) -> Tuple[float, float, np.ndarray]:
     """
     Fine-tune a context-sensitive sequence model (GRU) using a pretrained encoder (epoch-embeddings).
     Returns the best validation MF1 score achieved.
@@ -217,7 +217,7 @@ def train_contextsensitive_classifier(
     log_path.mkdir(parents=True, exist_ok=True)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    writer = SummaryWriter(log_dir=log_path)
+    writer = SummaryWriter(log_dir=str(log_path))
 
     # default preprocess config
     if preprocess_config is None:
@@ -313,6 +313,8 @@ def train_contextsensitive_classifier(
     )
 
     best_macro_f1 = 0.0
+    fin_acc = 0.0
+    fin_per_class_f1 = np.zeros(num_classes)
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -377,6 +379,8 @@ def train_contextsensitive_classifier(
 
         if val_macro_f1 > best_macro_f1:
             best_macro_f1 = val_macro_f1
+            fin_acc = val_acc
+            fin_per_class_f1 = val_per_class_f1
             patience_counter = 0
             torch.save(
                 {
@@ -421,5 +425,7 @@ def train_contextsensitive_classifier(
 
     writer.close()
     print(f"Best validation macro F1: {best_macro_f1:.4f}")
+    print(f"Final validation accuracy: {fin_acc:.4f}")
+    print(f"Final validation per-class F1: {np.round(fin_per_class_f1, 4)}")
     print(f"Checkpoints saved to: {checkpoint_path}")
-    return best_macro_f1
+    return best_macro_f1, fin_acc, fin_per_class_f1

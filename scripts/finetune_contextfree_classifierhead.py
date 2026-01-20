@@ -39,7 +39,8 @@ CHECKPOINT_LEOMED_DIR = PROJECT_ROOT / "checkpoints_leomed"
 
 SPLITS_FILE = PROJECT_ROOT / "data" / "processed" / "data_splits_70_15_15.json"
 
-
+# subjects = nights (pids=persons, subjects=nights (IMPORTANT distinction!))
+# sample night-wise (person-wise split is already done in data_splits file, we use those splits here)
 def sample_subjects(subjects: List[str], fraction: float, seed: int = 42) -> List[str]:
     if fraction < 0.0 or fraction > 1.0:
         raise ValueError(f"fraction must be between 0.0 and 1.0, got {fraction}")
@@ -89,7 +90,7 @@ def run_stage1(
 
 
     # model parameters are set here! keep them fixed as they are here! otherwise model loading might not work #
-    best_f1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
+    best_mf1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
         num_epochs=num_epochs,
         batch_size=batch_size,
         lr_encoder=lr_encoder,
@@ -116,11 +117,11 @@ def run_stage1(
     )
 
     print("\n" + "=" * 80)
-    print(f"STAGE 1 COMPLETE - Best Val F1: {best_f1:.4f}")
+    print(f"STAGE 1 COMPLETE - Best Val MF1: {best_mf1:.4f}")
     print(f"Final Val Accuracy: {fin_acc:.4f}")
     print(f"Final Per-Class F1: {fin_per_class_f1}")
     print("=" * 80 + "\n")
-    return best_f1, fin_acc, fin_per_class_f1
+    return best_mf1, fin_acc, fin_per_class_f1
 
 
 def run_stage2(
@@ -155,8 +156,8 @@ def run_stage2(
     sampled_train = sample_subjects(combined, fraction, seed)
 
     print("Subject allocation:")
-    print(f"  Train: {len(train_subjects)} | Val: {len(val_subjects)} | Combined: {len(combined)}")
-    print(f"  Sampled for training: {len(sampled_train)}")
+    print(f"  Train: {len(train_subjects)} | Val: {len(val_subjects)} | Combined: {len(combined)} nights")
+    print(f"  Sampled for training: {len(sampled_train)} nights")
     print(f"  Test: {len(test_subjects)}")
     print(f"  Seed: {seed}\n")
 
@@ -164,7 +165,7 @@ def run_stage2(
         CONFIG_DIR / "notch_bandpass_resample_znorm.yaml"
     )
 
-    best_f1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
+    best_mf1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
         num_epochs=num_epochs,
         batch_size=batch_size,
         lr_encoder=lr_encoder,
@@ -191,12 +192,11 @@ def run_stage2(
     )
 
     print("\n" + "=" * 80)
-    print(f"STAGE 2 COMPLETE - Test F1: {best_f1:.4f}")
+    print(f"STAGE 2 COMPLETE - Test MF1: {best_mf1:.4f}")
     print(f"Final Test Accuracy: {fin_acc:.4f}")
     print(f"Final Test Per-Class F1: {fin_per_class_f1}")
     print("=" * 80 + "\n")
-    return best_f1, fin_acc, fin_per_class_f1
-
+    return best_mf1, fin_acc, fin_per_class_f1
 
 def main():     # Run experiments for different fractions and modes
     SEED = 42
@@ -244,7 +244,7 @@ def main():     # Run experiments for different fractions and modes
                     "stage2_acc": stage2_acc,
                     "stage2_per_class_f1": stage2_per_class_f1.tolist(),
                 }
-            if mode == "fully-supervised":
+            elif mode == "fully-supervised":
                 res_fullysuperv_dict[str(p)] = {
                     "stage2_mf1": stage2_mf1,
                     "stage2_acc": stage2_acc,

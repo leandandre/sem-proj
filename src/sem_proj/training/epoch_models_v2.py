@@ -200,7 +200,7 @@ def train_contextfree_classifierhead(
     num_classes: int = 5,
     train_subjects: Optional[list] = None,
     val_subjects: Optional[list] = None,
-) -> float:
+) -> Tuple[float, float, np.ndarray]:
     """Fine-tune SSL classifier head (context-free, per-epoch).
     IS ALSO USED FOR THE FULLY-SUPERVISED TRAINING TO COMPARE WITH THE SSL FINE-TUNING RESULTS.
     """
