@@ -36,7 +36,7 @@ def make_dataloaders_ssl(batch_size: int = 16, preprocess_config: Optional[Prepr
         subjects=tr_subs, 
         mode="cross",
         preprocess_config=preprocess_config,
-        use_cache=use_cache
+        use_cache=use_cache         # no data augmentation for SSL pre-training
     )
     val_ds = BoasDataset(
         subjects=val_subs, 

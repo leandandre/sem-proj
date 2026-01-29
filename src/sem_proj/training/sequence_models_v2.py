@@ -199,6 +199,7 @@ def train_contextsensitive_classifier(
         dim_feedforward: int = 512,
         dropout_encoder: float = 0.2,
         dropout_gru: float = 0.2,
+        bidirectional_gru: bool = True,
         target_tokens: int = 240,
         class_weighted_loss: bool = True,
         gradient_clip: float = 5.0,
@@ -279,7 +280,7 @@ def train_contextsensitive_classifier(
         hidden_size=128,
         num_layers=1,
         num_classes=num_classes,
-        bidirectional=True,
+        bidirectional=bidirectional_gru,
     ).to(device)
 
     if class_weighted_loss:
@@ -401,6 +402,8 @@ def train_contextsensitive_classifier(
                         "dropout_gru": dropout_gru,
                         "target_tokens": target_tokens if fully_supervised else encoder_hb_cfg['target_tokens'],
                         "num_classes": num_classes,
+                        "seq_len": seq_len, # forgot that one, so is not in the checkpoints, used L=20
+                        "stride": stride, # forgot that one, so is not in the checkpoints, used stride=5
                     },
                     "training_config": {
                         "num_epochs": num_epochs,

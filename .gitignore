@@ -221,6 +221,8 @@ checkpoints_leomed/
 # TensorBoard logs (regenerated during training)
 logs/
 
+reports/
+
 # Temporary outputs
 data/interim/
 models/export/
