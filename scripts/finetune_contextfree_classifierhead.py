@@ -227,7 +227,7 @@ def main():     # Run experiments for different fractions and modes
             print("#" * 100 + "\n")
 
             # Stage 2 (testing)
-            stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage2(
+            stage1_mf1, stage1_acc, stage1_per_class_f1 = run_stage1(
                 fraction=p,
                 seed=SEED,
                 ssl_checkpoint=SSL_CHECKPOINT,
@@ -236,19 +236,19 @@ def main():     # Run experiments for different fractions and modes
                 lr_encoder=LR_ENCODER,
                 freeze_encoder_flag=FREEZE_ENCODER,
                 lr_head=LR_HEAD,
-                experiment_name=f"ctxfree_stage1_p{p}_{mode.lower().replace('-', '_')}",
+                experiment_name=f"ctxfree_stage1_p{p}_{mode.lower().replace('-', '_')}_stronger_MLP_v1",    # train with stronger MLP head
             )
             if mode == "ssl-finetuning":
                 res_finetuning_dict[str(p)] = {
-                    "stage2_mf1": stage2_mf1,
-                    "stage2_acc": stage2_acc,
-                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                    "stage1_mf1": stage1_mf1,
+                    "stage1_acc": stage1_acc,
+                    "stage1_per_class_f1": stage1_per_class_f1.tolist(),
                 }
             elif mode == "fully-supervised":
                 res_fullysuperv_dict[str(p)] = {
-                    "stage2_mf1": stage2_mf1,
-                    "stage2_acc": stage2_acc,
-                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                    "stage1_mf1": stage1_mf1,
+                    "stage1_acc": stage1_acc,
+                    "stage1_per_class_f1": stage1_per_class_f1.tolist(),
                 }
 
             print("\n" + "=" * 80)
@@ -256,13 +256,13 @@ def main():     # Run experiments for different fractions and modes
             print("=" * 80)
             print(f"Mode: {mode.upper()}")
             print(f"Fraction: {p*100:.0f}%")
-            print(f"Stage 2 best Val F1: {stage2_mf1:.4f}")
-            print(f"Stage 2 final Val Acc: {stage2_acc:.4f}")
-            print(f"Stage 2 final Per-Class F1: {stage2_per_class_f1}")
+            print(f"Stage 1 best Val F1: {stage1_mf1:.4f}")
+            print(f"Stage 1 final Val Acc: {stage1_acc:.4f}")
+            print(f"Stage 1 final Per-Class F1: {stage1_per_class_f1}")
             print("=" * 80 + "\n")
-    with open(TARGET_DIR / "ctxfree_finetuning_results_stage2.json", 'w') as f:
+    with open(TARGET_DIR / "ctxfree_finetuning_results_stage1_stronger_MLP_v1.json", 'w') as f:
         json.dump(res_finetuning_dict, f, indent=4)
-    with open(TARGET_DIR / "ctxfree_fullysupervised_results_stage2.json", 'w') as f:
+    with open(TARGET_DIR / "ctxfree_fullysupervised_results_stage1_stronger_MLP_v1.json", 'w') as f:
         json.dump(res_fullysuperv_dict, f, indent=4)
 
     

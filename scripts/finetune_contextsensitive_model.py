@@ -196,6 +196,8 @@ def main():
     TARGET_DIR = PROJECT_ROOT / "reports" / "metrics"
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
+    CHECKPOINT_DIR = CHECKPOINT_LEOMED_DIR  # since i run on laptop now
+
     for mode in ["ssl-finetuning", "fully-supervised"]:
         if mode == "ssl-finetuning":
             SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
@@ -210,12 +212,13 @@ def main():
         else:
             raise ValueError(f"Unknown mode: {mode}")
 
-        for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]:
+        # for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]:
+        for p in [0.01]:
             print("\n" + "#" * 100)
             print(f"RUNNING MODE: {mode.upper()} | LABELED FRACTION: {p*100:.0f}%")
             print("#" * 100 + "\n")
 
-            stage2_mf1, stage2_acc, stage2_per_class_f1 = run_stage2(
+            stage1_mf1, stage1_acc, stage1_per_class_f1 = run_stage1(
                 fraction=p,
                 seed=SEED,
                 ssl_checkpoint=SSL_CHECKPOINT,
@@ -226,33 +229,33 @@ def main():
                 lr_encoder=LR_ENCODER,
                 freeze_encoder_flag=FREEZE_ENCODER,
                 lr_gru=LR_GRU,
-                experiment_name=f"ctxsensitive_stage2_p{p}_{mode.lower().replace('-', '_')}",
+                experiment_name=f"ctxsensitive_stage1_p{p}_{mode.lower().replace('-', '_')}",
             )
             if mode == "ssl-finetuning":
                 res_finetuning_dict[str(p)] = {
-                    "stage2_mf1": stage2_mf1,
-                    "stage2_acc": stage2_acc,
-                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                    "stage1_mf1": stage1_mf1,
+                    "stage1_acc": stage1_acc,
+                    "stage1_per_class_f1": stage1_per_class_f1.tolist(),
                 }
             elif mode == "fully-supervised":
                 res_fullysuperv_dict[str(p)] = {
-                    "stage2_mf1": stage2_mf1,
-                    "stage2_acc": stage2_acc,
-                    "stage2_per_class_f1": stage2_per_class_f1.tolist(),
+                    "stage1_mf1": stage1_mf1,
+                    "stage1_acc": stage1_acc,
+                    "stage1_per_class_f1": stage1_per_class_f1.tolist(),
                 }
             print("\n" + "=" * 80)
             print("RUN COMPLETE")
             print("=" * 80)
             print(f"Mode: {mode.upper()}")
             print(f"Fraction: {p*100:.0f}%")
-            print(f"Stage 2 best Val F1: {stage2_mf1:.4f}")
-            print(f"Stage 2 final Val Acc: {stage2_acc:.4f}")
-            print(f"Stage 2 final Per-Class F1: {stage2_per_class_f1}")
+            print(f"Stage 1 best Val F1: {stage1_mf1:.4f}")
+            print(f"Stage 1 final Val Acc: {stage1_acc:.4f}")
+            print(f"Stage 1 final Per-Class F1: {stage1_per_class_f1}")
             print("=" * 80 + "\n")
-    with open(TARGET_DIR / "ctxsensitive_finetuning_results_stage2.json", 'w') as f:
-        json.dump(res_finetuning_dict, f, indent=4)
-    with open(TARGET_DIR / "ctxsensitive_fullysupervised_results_stage2.json", 'w') as f:
-        json.dump(res_fullysuperv_dict, f, indent=4)
+    # with open(TARGET_DIR / "ctxsensitive_finetuning_results_stage1_p0.01.json", 'w') as f:
+    #     json.dump(res_finetuning_dict, f, indent=4)
+    # with open(TARGET_DIR / "ctxsensitive_fullysupervised_results_stage1_p0.01.json", 'w') as f:
+    #     json.dump(res_fullysuperv_dict, f, indent=4)
     
             
 

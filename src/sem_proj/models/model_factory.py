@@ -1298,10 +1298,10 @@ class SSLClassifierHead(nn.Module):
         super().__init__()
         self.classifier = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Linear(d_model, d_model),
+            nn.Linear(d_model, 2*d_model),  # increased hidden dim (for the 'stronger_MLP_v runs)
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(d_model, num_classes),
+            nn.Linear(2*d_model, num_classes),  # from increased hidden dim to num_classes
         )
 
     def forward(self, x):
