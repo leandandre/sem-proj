@@ -27,4 +27,4 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 nvidia-smi
 
 # 5) Run your training script
-python -u scripts/finetune_contextsensitive_model.py
+python -u scripts/finetune_contextsensitive_model_v3.py

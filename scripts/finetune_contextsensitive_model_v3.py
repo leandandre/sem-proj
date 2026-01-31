@@ -178,3 +178,6 @@ def main():
         json.dump(res_finetuning_dict, f, indent=4)
     with open(TARGET_DIR / f"ctxsensitive_fullysupervised_results_bidir{BIDIRECTIONAL}_L{SEQ_LENGTH}_s{STRIDE}_val_step_new.json", 'w') as f:
         json.dump(res_fullysuperv_dict, f, indent=4)
+
+if __name__ == "__main__":
+    main()
