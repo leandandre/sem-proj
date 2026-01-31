@@ -107,16 +107,16 @@ def main():
     SEED = 42
     NUM_EPOCHS = 200
     BATCH_SIZE = 64
-    # BATCH_SIZE = 16  # to try on laptop
+    # BATCH_SIZE = 16  # when running on laptop
     SEQ_LENGTH = 20
     STRIDE = 5
-    BIDIRECTIONAL = True
+    BIDIRECTIONAL = False
     res_finetuning_dict = {}
     res_fullysuperv_dict = {}
     TARGET_DIR = PROJECT_ROOT / "reports" / "metrics"
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
-    # CHECKPOINT_DIR = CHECKPOINT_LEOMED_DIR  # since i run on laptop now
+    # CHECKPOINT_DIR = CHECKPOINT_LEOMED_DIR  # when running on laptop
 
     for mode in ["ssl-finetuning", "fully-supervised"]:
         if mode == "ssl-finetuning":

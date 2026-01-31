@@ -260,9 +260,9 @@ def main():     # Run experiments for different fractions and modes
             print(f"Stage 1 final Val Acc: {stage1_acc:.4f}")
             print(f"Stage 1 final Per-Class F1: {stage1_per_class_f1}")
             print("=" * 80 + "\n")
-    with open(TARGET_DIR / "ctxfree_finetuning_results_stage1_stronger_MLP_v1.json", 'w') as f:
+    with open(TARGET_DIR / "ctxfree_finetuning_results_val_step_stronger_MLP_v1.json", 'w') as f:
         json.dump(res_finetuning_dict, f, indent=4)
-    with open(TARGET_DIR / "ctxfree_fullysupervised_results_stage1_stronger_MLP_v1.json", 'w') as f:
+    with open(TARGET_DIR / "ctxfree_fullysupervised_results_val_step_stronger_MLP_v1.json", 'w') as f:
         json.dump(res_fullysuperv_dict, f, indent=4)
 
     
