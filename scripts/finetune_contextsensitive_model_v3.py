@@ -108,9 +108,10 @@ def main():
     NUM_EPOCHS = 200
     BATCH_SIZE = 64
     # BATCH_SIZE = 16  # when running on laptop
-    SEQ_LENGTH = 20
-    STRIDE = 5
-    BIDIRECTIONAL = False
+
+    # SEQ_LENGTH = 20
+    # STRIDE = 5
+    BIDIRECTIONAL = True
     res_finetuning_dict = {}
     res_fullysuperv_dict = {}
     TARGET_DIR = PROJECT_ROOT / "reports" / "metrics"
@@ -118,67 +119,73 @@ def main():
 
     # CHECKPOINT_DIR = CHECKPOINT_LEOMED_DIR  # when running on laptop
 
-    for mode in ["ssl-finetuning", "fully-supervised"]:
-        if mode == "ssl-finetuning":
-            SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
-            FREEZE_ENCODER = False  # allow some learning in the encoder
-            LR_GRU = 1e-4
-            LR_ENCODER = 1e-5
-        elif mode == "fully-supervised":
-            SSL_CHECKPOINT = None
-            FREEZE_ENCODER = False
-            LR_GRU = 1e-4
-            LR_ENCODER = LR_GRU
+    for s_length in [10, 5]:
+        if s_length == 10:
+            STRIDE = 2
         else:
-            raise ValueError(f"Unknown mode: {mode}")
-
-        for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]:
-            print("\n" + "#" * 100)
-            print(f"RUNNING MODE: {mode.upper()} | LABELED FRACTION: {p*100:.0f}%")
-            print("#" * 100 + "\n")
-
-            val_mf1, val_acc, val_per_class_f1, best_epoch = validation_step(
-                fraction=p,
-                seed=SEED,
-                ssl_checkpoint=SSL_CHECKPOINT,
-                num_epochs=NUM_EPOCHS,
-                batch_size=BATCH_SIZE,
-                seq_length=SEQ_LENGTH,
-                stride=STRIDE,
-                lr_encoder=LR_ENCODER,
-                freeze_encoder_flag=FREEZE_ENCODER,
-                lr_gru=LR_GRU,
-                bidirectional=BIDIRECTIONAL,
-                experiment_name=f"ctxsensitive_val_step_p{p}_{mode.lower().replace('-', '_')}_bidir{BIDIRECTIONAL}_L{SEQ_LENGTH}_s{STRIDE}",
-            )
+            STRIDE = 1
+        
+        for mode in ["ssl-finetuning", "fully-supervised"]:
             if mode == "ssl-finetuning":
-                res_finetuning_dict[str(p)] = {
-                    "val_mf1": val_mf1,
-                    "val_acc": val_acc,
-                    "val_per_class_f1": val_per_class_f1.tolist(),
-                    "val_best_epoch": best_epoch,
-                }
+                SSL_CHECKPOINT = CHECKPOINT_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+                FREEZE_ENCODER = False  # allow some learning in the encoder
+                LR_GRU = 1e-4
+                LR_ENCODER = 1e-5
             elif mode == "fully-supervised":
-                res_fullysuperv_dict[str(p)] = {
-                    "val_mf1": val_mf1,
-                    "val_acc": val_acc,
-                    "val_per_class_f1": val_per_class_f1.tolist(),
-                    "val_best_epoch": best_epoch,
-                }
-            print("\n" + "=" * 80)
-            print("RUN COMPLETE")
-            print("=" * 80)
-            print(f"Mode: {mode.upper()}")
-            print(f"Fraction: {p*100:.0f}%")
-            print(f"best Val F1: {val_mf1:.4f}")
-            print(f"final Val Acc: {val_acc:.4f}")
-            print(f"final Per-Class F1: {val_per_class_f1}")
-            print(f"best Epoch: {best_epoch}")
-            print("=" * 80 + "\n")
-    with open(TARGET_DIR / f"ctxsensitive_finetuning_results_bidir{BIDIRECTIONAL}_L{SEQ_LENGTH}_s{STRIDE}_val_step_new.json", 'w') as f:
-        json.dump(res_finetuning_dict, f, indent=4)
-    with open(TARGET_DIR / f"ctxsensitive_fullysupervised_results_bidir{BIDIRECTIONAL}_L{SEQ_LENGTH}_s{STRIDE}_val_step_new.json", 'w') as f:
-        json.dump(res_fullysuperv_dict, f, indent=4)
+                SSL_CHECKPOINT = None
+                FREEZE_ENCODER = False
+                LR_GRU = 1e-4
+                LR_ENCODER = LR_GRU
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
+
+            for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]:
+                print("\n" + "#" * 100)
+                print(f"RUNNING MODE: {mode.upper()} | LABELED FRACTION: {p*100:.0f}%")
+                print("#" * 100 + "\n")
+
+                val_mf1, val_acc, val_per_class_f1, best_epoch = validation_step(
+                    fraction=p,
+                    seed=SEED,
+                    ssl_checkpoint=SSL_CHECKPOINT,
+                    num_epochs=NUM_EPOCHS,
+                    batch_size=BATCH_SIZE,
+                    seq_length=s_length,
+                    stride=STRIDE,
+                    lr_encoder=LR_ENCODER,
+                    freeze_encoder_flag=FREEZE_ENCODER,
+                    lr_gru=LR_GRU,
+                    bidirectional=BIDIRECTIONAL,
+                    experiment_name=f"ctxsensitive_val_step_p{p}_{mode.lower().replace('-', '_')}_bidir{BIDIRECTIONAL}_L{s_length}_s{STRIDE}",
+                )
+                if mode == "ssl-finetuning":
+                    res_finetuning_dict[str(p)] = {
+                        "val_mf1": val_mf1,
+                        "val_acc": val_acc,
+                        "val_per_class_f1": val_per_class_f1.tolist(),
+                        "val_best_epoch": best_epoch,
+                    }
+                elif mode == "fully-supervised":
+                    res_fullysuperv_dict[str(p)] = {
+                        "val_mf1": val_mf1,
+                        "val_acc": val_acc,
+                        "val_per_class_f1": val_per_class_f1.tolist(),
+                        "val_best_epoch": best_epoch,
+                    }
+                print("\n" + "=" * 80)
+                print("RUN COMPLETE")
+                print("=" * 80)
+                print(f"Mode: {mode.upper()}")
+                print(f"Fraction: {p*100:.0f}%")
+                print(f"best Val F1: {val_mf1:.4f}")
+                print(f"final Val Acc: {val_acc:.4f}")
+                print(f"final Per-Class F1: {val_per_class_f1}")
+                print(f"best Epoch: {best_epoch}")
+                print("=" * 80 + "\n")
+        with open(TARGET_DIR / f"ctxsensitive_finetuning_results_bidir{BIDIRECTIONAL}_L{s_length}_s{STRIDE}_val_step_new.json", 'w') as f:
+            json.dump(res_finetuning_dict, f, indent=4)
+        with open(TARGET_DIR / f"ctxsensitive_fullysupervised_results_bidir{BIDIRECTIONAL}_L{s_length}_s{STRIDE}_val_step_new.json", 'w') as f:
+            json.dump(res_fullysuperv_dict, f, indent=4)
 
 if __name__ == "__main__":
     main()
