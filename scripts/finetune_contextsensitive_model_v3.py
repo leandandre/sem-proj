@@ -111,7 +111,7 @@ def main():
 
     # SEQ_LENGTH = 20
     # STRIDE = 5
-    BIDIRECTIONAL = True
+    BIDIRECTIONAL = False
     res_finetuning_dict = {}
     res_fullysuperv_dict = {}
     TARGET_DIR = PROJECT_ROOT / "reports" / "metrics"
