@@ -216,7 +216,7 @@ data/processed/cache/
 # # Model checkpoints (too large, only keep best models)
 # checkpoints/
 
-# checkpoints_leomed/
+checkpoints_leomed/
 
 # TensorBoard logs (regenerated during training)
 logs/
