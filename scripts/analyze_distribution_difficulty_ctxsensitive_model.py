@@ -133,7 +133,7 @@ def main():
                 subjects=[night_id],
                 mode=mode,
                 seq_len=seq_len,
-                stride=stride,
+                stride=stride,      # to be 100% correct, stride should have been = seq_length, but does not matter much for qualitative analysis (13.02)
                 transform_hb=None, # no data augmentation during evaluation!
                 preprocess_config=preprocess_config,
                 use_cache=use_cache,
@@ -159,7 +159,7 @@ def main():
                 subjects=[night_id],
                 mode=mode,
                 seq_len=seq_len,
-                stride=stride,
+                stride=stride,      # to be 100% correct, stride should have been = seq_length, but does not matter much for qualitative analysis (13.02)
                 transform_hb=None, # no data augmentation during evaluation!
                 preprocess_config=preprocess_config,
                 use_cache=use_cache,
