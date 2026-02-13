@@ -214,7 +214,7 @@ data/raw/
 data/processed/cache/
 
 # # Model checkpoints (too large, only keep best models)
-# checkpoints/
+checkpoints/
 
 checkpoints_leomed/
 

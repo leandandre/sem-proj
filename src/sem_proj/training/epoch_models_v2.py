@@ -1,5 +1,5 @@
 """
-Fine-tuning (or training supervised from scratch) a context-free classifier head (SSLClassifierHead) on top of a pretrained SSL epoch encoder (SSLEpochTransformerConv1D_v2).
+The training script for fine-tuning (or training supervised from scratch) a context-free classifier head (SSLClassifierHead) on top of a pretrained SSL epoch encoder (SSLEpochTransformerConv1D_v2).
 """
 from __future__ import annotations
 
