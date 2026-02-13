@@ -1,5 +1,5 @@
 """
-This script scores the validation and the test nights individually to see what nights are hard to classify and if vaidation is more difficutl than test set.
+This script scores the validation and the test nights individually (for the context-sensitive model) to see what nights are hard to classify and if vaidation is more difficutl than test set.
 """
 import numpy as np
 import json
