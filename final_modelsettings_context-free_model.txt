@@ -1,0 +1,46 @@
+### these are the hyperparameters and the architecture for my best context-free model (same architecture for Supervised from Scratch)###
+    batch_size = 512
+    lr_encoder = 1e-5 # for supervised from scratch it is 1e-3
+    lr_head = 1e-3
+    mode = "headband"
+    preprocess_config = PreprocessingConfig.from_yaml(CONFIG_DIR / "notch_bandpass_resample_znorm.yaml")
+    use_cache = True
+    ssl_checkpoint = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    freeze_encoder=False
+    d_model = 128 # embedding dimension in all models (SSL and supervised)
+    nhead = 4 # 4 attention heads in the transformer
+    num_layers_encoder = 2 # 2 transformer layers
+    dim_feedforward = 512 # feedforward dimension in the transformer, always kept it at 4*d_model
+    dropout_encoder = 0.2
+    dropout_head = 0.2
+    target_tokens = 240 # number of input tokens to the transformer
+    class_weighted_loss = True # always used it
+    gradient_clip = 5.0 # for my final models always used 5.0
+    early_stopping_patience = 12
+    num_classes = 5 # 5 sleep stages to classify
+    ### end of architecture and hyperparameters ### 
+
+### create the context-free model like this ###
+encoder = SSLEpochTransformerConv1D_v2(
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers_encoder,
+        dim_feedforward=dim_feedforward,
+        dropout=dropout_encoder,
+        target_tokens=target_tokens,
+    )
+    head = SSLClassifierHead(
+        d_model=d_model,
+        dropout=dropout_head,
+        num_classes=num_classes,
+    )
+    model = nn.Sequential(encoder, head)
+
+### best model checkpoints (trained models) for different used fraction of labels. Can be found in checkpoints_leomed folder ###
+exp = "ctxfree_stage1_"
+names_finetuned = [exp + f"p{p}_ssl_finetuning_stronger_MLP_v1" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+names_fullysuperv = [exp + f"p{p}_fully_supervised_stronger_MLP_v1" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+names_linprob = [exp + f"p{p}_ssl_finetuning_linearprobing" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+
+### SSL pretrained encoder is this checkpoint ###
+ssl_checkpoint = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"

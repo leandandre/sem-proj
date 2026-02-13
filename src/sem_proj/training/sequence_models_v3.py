@@ -1,3 +1,6 @@
+"""
+The training script for fine-tuning (or training supervised from scratch) a context-sensitive GRU (SequenceGRUClassifier) on top of a pretrained SSL epoch encoder (SSLEpochTransformerConv1D_v2).
+"""
 import json
 from pathlib import Path
 from typing import List, Optional, Tuple

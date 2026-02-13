@@ -213,23 +213,12 @@ data/raw/
 # Preprocessed cache (regenerated from raw data)
 data/processed/cache/
 
-# Model checkpoints (too large, only keep best models)
-checkpoints/
+# # Model checkpoints (too large, only keep best models)
+# checkpoints/
 
-checkpoints_leomed/
+# checkpoints_leomed/
 
 # TensorBoard logs (regenerated during training)
 logs/
 
-reports/
-
-# Temporary outputs
-data/interim/
-models/export/
-models/runs/
-
-# Keep data splits (important for reproducibility!)
-!data/processed/data_splits.json
-
-# Keep config files
-!configs/
+reports/figure/

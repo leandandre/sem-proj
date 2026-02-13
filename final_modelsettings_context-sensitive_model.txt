@@ -1,0 +1,55 @@
+### these are the hyperparameters and the architecture for my best sequence model (same architecture for Supervised from Scratch)###
+    batch_size = 64
+    seq_len = 10  # length of input sequences
+    stride = 2    # stride for creating sequences
+    lr_encoder = 1e-5 # for supervised from scratch it is 1e-4
+    lr_gru = 1e-4 # same for both
+    mode = "headband"
+    preprocess_config = PreprocessingConfig.from_yaml(CONFIG_DIR / "notch_bandpass_resample_znorm.yaml")
+    use_cache = True
+    ssl_checkpoint = CHECKPOINT_LEOMED_DIR / "ssl_cross_modal_notch_bandpass_resample_znorm_v1" / "best_model.pt"
+    freeze_encoder=False
+    d_model = 128 # embedding dimension in all models (SSL and supervised)
+    nhead = 4 # 4 attention heads in the transformer
+    num_layers_encoder = 2 # 2 transformer layers
+    dim_feedforward = 512 # feedforward dimension in the transformer, always kept it at 4*d_model
+    dropout_encoder = 0.2
+    dropout_gru = 0.2 # never in use since gru only has one layer
+    target_tokens = 240 # number of input tokens to the transformer
+    class_weighted_loss = True # always used it
+    gradient_clip = 5.0 # for my final models always used 5.0
+    early_stopping_patience = 12
+    num_classes = 5 # 5 sleep stages to classify
+    hidden_size = 128 # gru hidden size
+    num_layers = 1 # gru number of layers
+    bidirectional = True # True for bidirectionality, False for unidirectionality
+    ### end of architecture and hyperparameters ### 
+
+    # NOTE: the leq_len and stride were not saved in the checkpoints, so add them manually (L=20, stride=5)
+
+### create the context-sensitive model like this ###
+encoder = SSLEpochTransformerConv1D_v2(
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers_encoder,
+        dim_feedforward=dim_feedforward,
+        dropout=dropout_encoder,
+        target_tokens=target_tokens,
+    )
+    context_model = SequenceGRUClassifier(
+        epoch_model = encoder,
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        num_classes=num_classes,
+        bidirectional=bidirectional,
+    )
+
+### Bidirectional model, best model checkpoints (trained models) for different used fraction of labels. Can be found in checkpoints_leomed folder ###
+exp = "ctxsensitive_val_step_"
+names_finetuned_bidir_l10_s2 = [exp + f"p{p}_ssl_finetuning_bidirTrue_L10_s2" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+names_fullysupervised_bidir_l10_s2 = [exp + f"p{p}_fully_supervised_bidirTrue_L10_s2" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+
+### Unidirectional model, best model checkpoints (trained models) for different used fraction of labels. Can be found in checkpoints_leomed folder ###
+exp = "ctxsensitive_val_step_"
+names_finetuned_unidir_l5_s1 = [exp + f"p{p}_ssl_finetuning_bidirFalse_L5_s1" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]
+names_fullysupervised_unidir_l5_s1 = [exp + f"p{p}_fully_supervised_bidirFalse_L5_s1" for p in [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]]

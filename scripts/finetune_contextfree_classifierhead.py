@@ -1,24 +1,8 @@
 """
-Context-free SSL training script with controlled labeled data fractions.
-
-Supports TWO modes:
-1. FINE-TUNING: Set SSL_CHECKPOINT to your pretrained SSL encoder
-2. FULLY-SUPERVISED: Set SSL_CHECKPOINT = None for end-to-end random init training
-
+Fine-tuning (or training supervised from scratch) the context-free classifier head (SSLClassifierHead) on top of a pretrained SSL epoch encoder (SSLEpochTransformerConv1D_v2).
 ALSO: supports linear probing, just change classifier head in epoch_models_v2.py to SSLLinearProbing!
 no changes needed here except for the naming of the experiment.
-
 --> used this script to compare linear probe vs. fine-tuned vs. fully-supervised, depending on proportion p of labeled data used.
-
-Two-stage workflow (mirrors finetune_variable_gru.py):
-
-Stage 1: Hyperparameter Tuning
-- Train on fraction p of train_subjects
-- Validate on full val_subjects
-
-Stage 2: Final Evaluation
-- Train on fraction p of (train_subjects + val_subjects)
-- Test on full test_subjects
 """
 import sys
 import json
@@ -49,7 +33,6 @@ def sample_subjects(subjects: List[str], fraction: float, seed: int = 42) -> Lis
     rng = random.Random(seed)
     n_sample = max(1, int(len(subjects) * fraction))
     return sorted(rng.sample(subjects, n_sample))
-
 
 def run_stage1(
     fraction: float,
@@ -88,7 +71,6 @@ def run_stage1(
         CONFIG_DIR / "notch_bandpass_resample_znorm.yaml"
     )
 
-
     # model parameters are set here! keep them fixed as they are here! otherwise model loading might not work #
     best_mf1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
         num_epochs=num_epochs,
@@ -120,81 +102,6 @@ def run_stage1(
     print(f"STAGE 1 COMPLETE - Best Val MF1: {best_mf1:.4f}")
     print(f"Final Val Accuracy: {fin_acc:.4f}")
     print(f"Final Per-Class F1: {fin_per_class_f1}")
-    print("=" * 80 + "\n")
-    return best_mf1, fin_acc, fin_per_class_f1
-
-
-def run_stage2(
-    fraction: float,
-    seed: int,
-    ssl_checkpoint: Path | None,
-    num_epochs: int,
-    batch_size: int,
-    lr_encoder: float,
-    freeze_encoder_flag: bool,
-    lr_head: float,
-    experiment_name: str,
-):
-    fully_supervised = ssl_checkpoint is None
-    mode_str = "Fully-Supervised Training" if fully_supervised else "SSL Fine-Tuning"
-    
-    print("\n" + "=" * 80)
-    print(f"STAGE 2: Final Evaluation ({mode_str})")
-    print("=" * 80)
-    print(f"Train on {fraction*100:.0f}% of (train + val); test on full test_subjects")
-    print("=" * 80 + "\n")
-    
-    assert SPLITS_FILE.exists(), f"Splits file not found: {SPLITS_FILE}"
-    with open(SPLITS_FILE, 'r') as f:
-        splits = json.load(f)
-
-    train_subjects = splits['train_subjects']
-    val_subjects = splits['val_subjects']
-    test_subjects = splits['test_subjects']
-
-    combined = train_subjects + val_subjects
-    sampled_train = sample_subjects(combined, fraction, seed)
-
-    print("Subject allocation:")
-    print(f"  Train: {len(train_subjects)} | Val: {len(val_subjects)} | Combined: {len(combined)} nights")
-    print(f"  Sampled for training: {len(sampled_train)} nights")
-    print(f"  Test: {len(test_subjects)}")
-    print(f"  Seed: {seed}\n")
-
-    config = PreprocessingConfig.from_yaml(
-        CONFIG_DIR / "notch_bandpass_resample_znorm.yaml"
-    )
-
-    best_mf1, fin_acc, fin_per_class_f1 = train_contextfree_classifierhead(
-        num_epochs=num_epochs,
-        batch_size=batch_size,
-        lr_encoder=lr_encoder,
-        lr_head=lr_head,
-        mode="headband",
-        experiment_name=experiment_name,
-        preprocess_config=config,
-        use_cache=True,
-        ssl_checkpoint=ssl_checkpoint,
-        freeze_encoder=freeze_encoder_flag,
-        d_model=128,
-        nhead=4,
-        num_layers_encoder=2,
-        dim_feedforward=512,
-        dropout_encoder=0.2,
-        dropout_head=0.2,
-        target_tokens=240,
-        class_weighted_loss=True,
-        gradient_clip=5.0,
-        early_stopping_patience=12,
-        num_classes=5,
-        train_subjects=sampled_train,
-        val_subjects=test_subjects,  # treat test set as held-out eval
-    )
-
-    print("\n" + "=" * 80)
-    print(f"STAGE 2 COMPLETE - Test MF1: {best_mf1:.4f}")
-    print(f"Final Test Accuracy: {fin_acc:.4f}")
-    print(f"Final Test Per-Class F1: {fin_per_class_f1}")
     print("=" * 80 + "\n")
     return best_mf1, fin_acc, fin_per_class_f1
 

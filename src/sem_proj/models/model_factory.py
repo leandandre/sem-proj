@@ -1,3 +1,9 @@
+"""
+File contains most of tried out models. All models not relevant for the final thesis version are marked with "# ignore"!
+Effectively used in the end are : SSLEpochTransformerConv1D_v2, SSLClassifierHead, SSLLinearProbing, SequenceGRUClassifier!
+Other models are just there in case someone wants to adapt investigated architectures.
+"""
+
 import math
 from typing import Optional
 from matplotlib.pylab import rint
@@ -5,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+# ignore
 class EpochTransformer(nn.Module):
     """
     Transformer-based model for epoch-level classification.
@@ -165,7 +171,7 @@ class EpochTransformer(nn.Module):
         return logits
     
 
-
+# ignore
 class ResidualConvBlock(nn.Module):
     def __init__(self, channels: int, kernel_size: int = 3, dilation: int = 1, dropout: float = 0.1):
         super().__init__()
@@ -182,7 +188,7 @@ class ResidualConvBlock(nn.Module):
     def forward(self, x):
         return F.gelu(x + self.net(x))   
 
-
+# ignore
 class EpochTransformerConv1D(nn.Module):
     """
     Transformer-based model for epoch-level classification.
@@ -330,6 +336,7 @@ class EpochTransformerConv1D(nn.Module):
         logits = self.classifier(cls_output)  # (batch, num_classes)
         return logits
 
+# ignore
 class EpochTransformerConv1D_v2(nn.Module):
     def __init__(
         self,
@@ -439,9 +446,7 @@ class EpochTransformerConv1D_v2(nn.Module):
         logits = self.classifier(mean)  # (batch, num_classes)
         return logits
     
-
-
-
+# ignore
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 29):
         super().__init__()
@@ -462,6 +467,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1)]
         return self.dropout(x)
 
+# ignore
 class MultiChannelSleepNet(nn.Module):
     def __init__(
         self,
@@ -681,7 +687,7 @@ class MultiChannelSleepNet(nn.Module):
         return logits
     
 
-
+# ignore
 class PositionalEncoding_v2(nn.Module):
     """
     Positional encoding following the paper's approach.
@@ -711,7 +717,7 @@ class PositionalEncoding_v2(nn.Module):
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
-
+# ignore
 class MultiChannelSleepNet_v2(nn.Module):
     """
     MultiChannelSleepNet v2: Exact architecture from the paper, but with internal STFT.
@@ -906,6 +912,8 @@ class MultiChannelSleepNet_v2(nn.Module):
     
 
 ### feeding several epoch embeddings into a sequence model (here, GRU) ###
+# SequenceGRUClassifier: THIS IS THE CHOSEN ARCHITECTURE FOR SEQUENCE MODELING.
+# PROJECT USED THIS FOR FINAL RESULTS.
 class SequenceGRUClassifier(nn.Module):
     def __init__(self, epoch_model, hidden_size=128, num_layers=1, num_classes=5, bidirectional=False):
         super().__init__()
@@ -947,7 +955,7 @@ class SequenceGRUClassifier(nn.Module):
         logits = self.classifier(gru_out)             # (B, L, num_classes)
         return logits
 
-
+# ignore
 class SequenceTransformerClassifier(nn.Module):
     """
     Sequence-level classifier using a small Transformer instead of GRU.
@@ -1064,13 +1072,7 @@ class SequenceTransformerClassifier(nn.Module):
         logits = self.classifier(trans_out)  # (B, L, num_classes)
         return logits
 
-
-
-    
-
-
-
-
+# ignore
 class SSLEpochTransformerConv1D(nn.Module):
     """
     Basically a copy from SL version, but without CLS token and classification head.
@@ -1172,7 +1174,8 @@ class SSLEpochTransformerConv1D(nn.Module):
         return x
     
 
-
+# SSLEpochTransformerConv1D_v2: THIS IS THE CHOSEN ENCODER ARCHITECTURE (with t=240 tokens, which means a temporal downsampling factor of 16).
+# USED FOR BOTH SSL PRETRAINING AND SL FINE-TUNING (with an additional classifier head or GRU for SL).
 class SSLEpochTransformerConv1D_v2(nn.Module):
     """
     Just a copy of SL version, but no classification head (returning the full transformer output).
@@ -1181,7 +1184,7 @@ class SSLEpochTransformerConv1D_v2(nn.Module):
     def __init__(
         self,
         input_channels=2,
-        seq_length: Optional[int] = None,
+        seq_length: Optional[int] = None,   # completely ignore this variable, does have no meaning at all (code cleaning 13.02)
         d_model=64,
         nhead=8,
         num_layers=4,
@@ -1281,9 +1284,6 @@ class SSLEpochTransformerConv1D_v2(nn.Module):
             return mean  # (batch, d_model), never happens in SSL
         # return whole transformer output for SSL purposes
         return x  # (batch, target_tokens, d_model)
-
-
-
 
 class SSLClassifierHead(nn.Module):
     """

@@ -1,9 +1,5 @@
 """
-Fine-tuning a context-free classifier head on top of a pretrained SSL epoch encoder.
-
-This module parallels sequence_models_variable.py but replaces the GRU with a
-simple per-epoch classifier head (SSLClassifierHead). Use when you want to
-fine-tune only on individual epochs without sequence context.
+Fine-tuning (or training supervised from scratch) a context-free classifier head (SSLClassifierHead) on top of a pretrained SSL epoch encoder (SSLEpochTransformerConv1D_v2).
 """
 from __future__ import annotations
 

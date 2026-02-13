@@ -1,3 +1,6 @@
+"""
+Create dataset classes for BOAS data. BoasDataset is the bases and loads window-level data. BoasSequenceDataset builds up on that and constructs consecutive windows as samples.
+"""
 from __future__ import annotations
 
 from typing import Iterable, List, Optional, Tuple

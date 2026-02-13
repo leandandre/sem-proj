@@ -1,4 +1,6 @@
-# REUSE: All imports
+"""
+SSL pre-training of SSLEpochTransformerConv1D_v2 with cross-modal contrastive learning.
+"""
 from typing import Optional
 import torch
 import torch.nn.functional as F
@@ -419,7 +421,7 @@ def train_ssl_epochtransformer(
 
 if __name__ == "__main__":
 
-    MODE = "pretrain"  # "pretrain" or "finetune"
+    MODE = "pretrain"
     
     # Shared config
     CONFIG_NAME = "notch_bandpass_resample_znorm"
@@ -439,20 +441,11 @@ if __name__ == "__main__":
         'num_layers': 2,
         'dim_feedforward': 512,
         'dropout': 0.2,
-        'target_tokens': 240   # when changing to SSLEpochTransformerConv1D_v2 this should be target_tokens = 240
+        'target_tokens': 240 
     }
     
-    # Fine-tuning settings (used if MODE == "finetune"), manually write the correct checkpoint name from the SSL pre-training run
-    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v4"  # Name of SSL experiment, change version number for each new run
+    SSL_CHECKPOINT_NAME = "ssl_cross_modal_notch_bandpass_resample_znorm_v1"  # Name of SSL experiment
     
-    FINETUNE_NUM_EPOCHS = 50
-    FINETUNE_BATCH_SIZE = 128
-    FINETUNE_LR_ENCODER = 1e-5      # 100× smaller than classifier
-    FINETUNE_LR_CLASSIFIER = 1e-3
-    FINETUNE_LABEL_FRACTION = 1.0   # fraction of labels to use during fine-tuning
-    FINETUNE_FREEZE_ENCODER = False # False = one-stage, True = two-stage (first linear probe, then end-to-end)
-    
-
     # Load preprocessing config
     config_file = CONFIG_DIR / f"{CONFIG_NAME}.yaml"
     preproc_cfg = PreprocessingConfig.from_yaml(config_file)
@@ -481,48 +474,3 @@ if __name__ == "__main__":
         print(f"  Checkpoint: {CHECKPOINT_DIR / experiment_name / 'best_model.pt'}")
         print(f"\nTo fine-tune, change MODE to 'finetune' and set:")
         print(f"  SSL_CHECKPOINT_NAME = '{experiment_name}'")
-    
-    elif MODE == "finetune":
-        print("\n" + "="*60)
-        print("PHASE 2: SUPERVISED FINE-TUNING")
-        print("="*60)
-        
-        # Resolve SSL checkpoint path
-        ssl_ckpt_path = CHECKPOINT_DIR / SSL_CHECKPOINT_NAME / "best_model.pt"
-        
-        if not ssl_ckpt_path.exists():
-            raise FileNotFoundError(
-                f"SSL checkpoint not found: {ssl_ckpt_path}\n"
-                f"Make sure SSL_CHECKPOINT_NAME = '{SSL_CHECKPOINT_NAME}' is correct.\n"
-                f"Available checkpoints:\n" + 
-                "\n".join(f"  - {p.name}" for p in CHECKPOINT_DIR.iterdir() if p.is_dir())
-            )
-        
-        # Generate experiment name
-        label_pct = int(FINETUNE_LABEL_FRACTION * 100)
-        freeze_str = "frozen" if FINETUNE_FREEZE_ENCODER else "endtoend"
-        experiment_name = f"ssl_finetuned_{label_pct}pct_{freeze_str}_v1"
-        
-        print(f"\nLoading SSL checkpoint: {ssl_ckpt_path}")
-        print(f"Label fraction: {FINETUNE_LABEL_FRACTION * 100:.0f}%")
-        print(f"Freeze encoder: {FINETUNE_FREEZE_ENCODER}")
-        
-        encoder, classifier = fine_tune_ssl_encoder(
-            encoder_checkpoint_path=ssl_ckpt_path,
-            num_epochs=FINETUNE_NUM_EPOCHS,
-            batch_size=FINETUNE_BATCH_SIZE,
-            lr_encoder=FINETUNE_LR_ENCODER,
-            lr_classifier=FINETUNE_LR_CLASSIFIER,
-            experiment_name=experiment_name,
-            preprocess_config=preproc_cfg,
-            use_cache=USE_CACHE,
-            class_weighted_loss=True,
-            freeze_encoder=FINETUNE_FREEZE_ENCODER,
-            label_fraction=FINETUNE_LABEL_FRACTION,
-        )
-        
-        print(f"\n✓ Fine-tuning complete!")
-        print(f"  Checkpoint: {CHECKPOINT_DIR / experiment_name / 'best_model.pt'}")
-    
-    else:
-        raise ValueError(f"Invalid MODE: {MODE}. Must be 'pretrain' or 'finetune'.")

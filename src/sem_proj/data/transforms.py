@@ -1,3 +1,6 @@
+"""
+Data augmentation transforms for EEG signals.
+"""
 import torch
 import numpy as np
 
